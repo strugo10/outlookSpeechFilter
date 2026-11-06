@@ -58,7 +58,7 @@ addonHandler.initTranslation()
 CONFIG_SECTION = "outlookSpeechFilter"
 OLD_CONFIG_SECTION = "outlookMessageCleaner"
 ADDON_NAME = "Outlook Speech Filter"
-ADDON_VERSION = "1.18.2"
+ADDON_VERSION = "1.18.3"
 ADDON_BUILD = "20261103.2"
 ADDON_BUILD_DATE = "2026-11-03"
 ADDON_AUTHOR = "Sławomir Strugarek (z pomocą Antigravity)"
@@ -4853,21 +4853,69 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return
 
 		# Sprawdź, czy użytkownik ma zaznaczonych wiele wiadomości na liście w Explorerze
+		nativeOm = getattr(appMod, "nativeOm", None)
+		if not nativeOm and getattr(focus, "parent", None):
+			p = focus.parent
+			if getattr(p, "appModule", None):
+				nativeOm = getattr(p.appModule, "nativeOm", None)
+
 		selObj = None
-		if getattr(appMod, "nativeOm", None):
+		if nativeOm:
 			try:
-				selObj = appMod.nativeOm.activeExplorer().selection
+				exp = None
+				for mName in ("activeExplorer", "ActiveExplorer"):
+					f = getattr(nativeOm, mName, None)
+					if f:
+						try:
+							exp = f() if callable(f) else f
+							if exp:
+								break
+						except Exception:
+							pass
+				if exp:
+					for sName in ("selection", "Selection"):
+						s = getattr(exp, sName, None)
+						if s is not None:
+							selObj = s() if callable(s) else s
+							if selObj is not None:
+								break
 			except Exception:
 				pass
-		if not selObj and getattr(focus, "parent", None):
-			p = focus.parent
-			if getattr(p, "appModule", None) and getattr(p.appModule, "nativeOm", None):
+
+		selCount = 0
+		if selObj:
+			for cName in ("count", "Count"):
+				cVal = getattr(selObj, cName, None)
+				if cVal is not None:
+					try:
+						selCount = int(cVal() if callable(cVal) else cVal)
+						break
+					except Exception:
+						pass
+			if selCount == 0:
 				try:
-					selObj = p.appModule.nativeOm.activeExplorer().selection
+					selCount = len(selObj)
 				except Exception:
 					pass
 
-		selCount = int(getattr(selObj, "Count", 0)) if selObj else 0
+		# Sprawdź UIA Selection Pattern na liście wiadomości (fallback)
+		if selCount <= 1 and focus:
+			try:
+				parentList = focus
+				for _ in range(3):
+					if not parentList:
+						break
+					role = getattr(parentList, "role", None)
+					if role in (controlTypes.Role.LIST, controlTypes.Role.TABLE, controlTypes.Role.TREEVIEW):
+						break
+					parentList = getattr(parentList, "parent", None)
+				if parentList and hasattr(parentList, "UIASelectionPattern"):
+					selItems = parentList.UIASelectionPattern.GetSelection()
+					if selItems and len(selItems) > 1:
+						selCount = len(selItems)
+			except Exception:
+				pass
+
 		if selCount > 1:
 			unreadCount = 0
 			attCount = 0
@@ -4876,15 +4924,42 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			limit = min(selCount, 100)
 			for i in range(1, limit + 1):
 				try:
-					item = selObj.Item(i)
-					if getattr(item, "UnRead", False):
-						unreadCount += 1
-					if int(getattr(getattr(item, "Attachments", None), "Count", 0)) > 0:
-						attCount += 1
-					if bool(getattr(item, "IsMarkedAsTask", False)) or int(getattr(item, "FlagStatus", 0)) == 2:
-						flaggedCount += 1
-					if int(getattr(item, "Importance", 1)) == 2:
-						highCount += 1
+					it = None
+					for itName in ("item", "Item"):
+						itFn = getattr(selObj, itName, None)
+						if itFn:
+							try:
+								it = itFn(i)
+								break
+							except Exception:
+								pass
+					if not it and selObj:
+						try:
+							it = selObj[i - 1]
+						except Exception:
+							pass
+
+					if it:
+						isUnread = bool(getattr(it, "unread", getattr(it, "UnRead", False)))
+						if isUnread:
+							unreadCount += 1
+						atts = getattr(it, "attachments", getattr(it, "Attachments", None))
+						attCnt = 0
+						if atts:
+							for aCount in ("count", "Count"):
+								v = getattr(atts, aCount, None)
+								if v is not None:
+									attCnt = int(v() if callable(v) else v)
+									break
+						if attCnt > 0:
+							attCount += 1
+						isTask = bool(getattr(it, "isMarkedAsTask", getattr(it, "IsMarkedAsTask", False)))
+						flagSt = int(getattr(it, "flagStatus", getattr(it, "FlagStatus", 0)))
+						if isTask or flagSt == 2:
+							flaggedCount += 1
+						imp = int(getattr(it, "importance", getattr(it, "Importance", 1)))
+						if imp == 2:
+							highCount += 1
 				except Exception:
 					pass
 
