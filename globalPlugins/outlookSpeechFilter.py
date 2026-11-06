@@ -105,7 +105,7 @@ confspec = {
 	"reportCategories": "boolean(default=False)",
 	"reportExternal": "boolean(default=False)",
 	"autoCheckUpdates": "boolean(default=True)",
-	"updateSourceUrl": r"string(default='G:\Mój dysk\Antigravity\Nvda dodatki\updates.json')",
+	"updateSourceUrl": r"string(default='https://raw.githubusercontent.com/strugo10/outlookSpeechFilter/main/update_info.json')",
 	"lastUpdateCheckTime": "float(default=0.0)",
 }
 
@@ -2624,7 +2624,7 @@ class AddonUpdaterEngine:
 
 	def get_configured_source(self) -> str:
 		conf = config.conf.get(self.config_section, {})
-		return conf.get("updateSourceUrl", r"G:\Mój dysk\Antigravity\Nvda dodatki\updates.json")
+		return conf.get("updateSourceUrl", "https://raw.githubusercontent.com/strugo10/outlookSpeechFilter/main/update_info.json")
 
 	def fetch_manifest(self) -> tuple[dict | None, str | None]:
 		configured = self.get_configured_source()
@@ -2632,6 +2632,8 @@ class AddonUpdaterEngine:
 		if configured:
 			candidates.append(configured.strip())
 		candidates.extend([
+			"https://raw.githubusercontent.com/strugo10/outlookSpeechFilter/main/update_info.json",
+			"https://raw.githubusercontent.com/strugo10/outlookSpeechFilter/main/updates.json",
 			r"G:\Mój dysk\Antigravity\Nvda dodatki\updates.json",
 			os.path.join(self.addon_dir, "update_info.json"),
 			os.path.join(self.addon_dir, "updates.json"),
@@ -3079,7 +3081,7 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 		self.txtUpdateSource = sHelper.addLabeledControl(
 			"&Lokalizacja pliku ogłoszeniowego (ścieżka na dysku lub URL):",
 			wx.TextCtrl,
-			value=conf.get("updateSourceUrl", r"G:\Mój dysk\Antigravity\Nvda dodatki\updates.json")
+			value=conf.get("updateSourceUrl", "https://raw.githubusercontent.com/strugo10/outlookSpeechFilter/main/update_info.json")
 		)
 
 		# Sekcja narzędziowa: Pomoc kontekstowa, Samouczek / Pomoc HTML, Kontakt z autorem, Skróty klawiszowe oraz Przywracanie ustawień domyślnych
