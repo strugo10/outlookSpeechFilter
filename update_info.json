@@ -1,0 +1,7 @@
+{
+  "name": "outlookSpeechFilter",
+  "version": "1.18.1",
+  "downloadUrl": "G:\\Mój dysk\\Antigravity\\Nvda dodatki\\Pakiety_Instalacyjne\\outlookSpeechFilter.nvda-addon",
+  "changelog": "Wersja 1.18.1:\n• Poprawka precyzji nawigacji: wyeliminowano przesunięcie (drift) kursora w długich wątkach mailowych dzięki wyszukiwaniu natywnemu Word.Range.Find.\n• Poprawka dostępności okna wątku (NVDA+F7): wyeliminowano blokadę wątku NVDA (wx.CallAfter), fokus natychmiast trafia na listę, a NVDA bezbłędnie wypowiada każdy zaznaczany element.\n• Dodano opcję włączania/wyłączania nawigatora wątków w ustawieniach dodatku oraz szybki skrót przełączający NVDA+Ctrl+Shift+T.",
+  "minNVDAVersion": "2021.1.0"
+}

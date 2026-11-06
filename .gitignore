@@ -1,0 +1,13 @@
+# Pliki tymczasowe Pythona
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Pakiety budowania
+*.nvda-addon
+
+# Pliki tymczasowe edytorów i systemowe
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
