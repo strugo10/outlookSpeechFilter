@@ -28,7 +28,10 @@ from comtypes.hresult import S_OK
 import addonHandler
 import api
 import config
-from config.configFlags import ReportTableHeaders
+try:
+	from config.configFlags import ReportTableHeaders
+except (ImportError, AttributeError):
+	ReportTableHeaders = None
 import controlTypes
 import globalPluginHandler
 import globalVars
@@ -55,7 +58,7 @@ addonHandler.initTranslation()
 CONFIG_SECTION = "outlookSpeechFilter"
 OLD_CONFIG_SECTION = "outlookMessageCleaner"
 ADDON_NAME = "Outlook Speech Filter"
-ADDON_VERSION = "1.18.1"
+ADDON_VERSION = "1.18.2"
 ADDON_BUILD = "20261103.2"
 ADDON_BUILD_DATE = "2026-11-03"
 ADDON_AUTHOR = "Sławomir Strugarek (z pomocą Antigravity)"
@@ -1636,7 +1639,8 @@ ATTACHMENT_TOKENS = {
 	"ma załączniki", "ma załącznik", "załącznik", "załączniki",
 	"has attachment", "has attachments", "attachment", "attachments",
 }
-UNREAD_TOKENS = {"nieprzeczytana", "nieprzeczytane", "przeczytana", "przeczytane", "unread", "read"}
+UNREAD_TOKENS = {"nieprzeczytana", "nieprzeczytane", "unread"}
+READ_TOKENS = {"przeczytana", "przeczytane", "read"}
 FORWARD_REPLY_TOKENS = {
 	"odpowiedziano", "odpowiedziano wszystkim", "przesłano dalej", "przesłana dalej",
 	"replied", "replied all", "forwarded",
@@ -1649,6 +1653,49 @@ RE_ATTACHMENT_TEXT = re.compile(
 	re.IGNORECASE,
 )
 
+RE_EXACT_ATTACHMENT_INDICATOR = re.compile(
+	r'^(?:(?:\d+\s+)?(?:załącznik(?:i|a|ów)?|attachments?)|(?:has\s+attachments?|ma\s+załączniki?))(?:\s*:\s*\d+)?$',
+	re.IGNORECASE
+)
+
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico", ".tiff", ".tif", ".svg"}
+
+
+def _is_attachment_inline_image(att):
+	"""
+	Precyzyjnie rozpoznaje, czy dany załącznik jest obrazem osadzonym w treści (inline).
+	Chroni zwykłe pliki o nazwach np. 'image_budget.pdf' oraz osadzone maile .msg (Type == 5).
+	"""
+	try:
+		fn = (getattr(att, "FileName", "") or "").lower()
+		ext = os.path.splitext(fn)[1]
+		# 1. Sprawdź właściwości MAPI (Content-ID oraz flagę MHTML_REF)
+		cid = ""
+		flags = 0
+		try:
+			pa = getattr(att, "PropertyAccessor", None)
+			if pa:
+				cid = str(pa.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x3712001F") or "")
+				flags = int(pa.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x37140003") or 0)
+		except Exception:
+			pass
+
+		if (cid or (flags & 4)) and (ext in IMAGE_EXTENSIONS or not ext):
+			return True
+
+		attType = int(getattr(att, "Type", 1) or 1)
+		# Typ 6 to olOLE (osadzony obiekt OLE)
+		if attType == 6 and (fn.startswith("oledata") or not ext):
+			return True
+
+		# Zrzuty ekranu wklejane ze schowka automatycznie nazywane przez Outlook (np. image001.png)
+		if ext in IMAGE_EXTENSIONS and re.match(r'^image\d{3,}\.(?:png|jpg|jpeg|gif|bmp)$', fn) and (cid or not fn):
+			return True
+
+		return False
+	except Exception:
+		return False
+
 _last_focused_statuses = []
 
 
@@ -1658,7 +1705,7 @@ def _is_attachment_text(text):
 	t = text.strip().lower()
 	if t in ATTACHMENT_TOKENS or t.rstrip(":").strip() in ATTACHMENT_TOKENS:
 		return True
-	return bool(RE_ATTACHMENT_TEXT.search(t))
+	return bool(RE_EXACT_ATTACHMENT_INDICATOR.match(t))
 
 
 def _extract_attachment_count(text):
@@ -1711,10 +1758,7 @@ def _get_real_attachments_count(selection, uiaObj=None):
 		for i in range(1, total + 1):
 			try:
 				att = attColl.item(i)
-				attType = int(getattr(att, "Type", 1) or 1)
-				fn = (getattr(att, "FileName", "") or "").lower()
-				# Typ 5=olEmbeddeditem, 6=olOLE to grafiki osadzone
-				if attType in (5, 6) or fn.startswith("image") or fn.startswith("oledata"):
+				if _is_attachment_inline_image(att):
 					continue
 				realCount += 1
 			except Exception:
@@ -1748,9 +1792,7 @@ def _get_inline_images_count(selection):
 		for i in range(1, total + 1):
 			try:
 				att = attColl.item(i)
-				attType = int(getattr(att, "Type", 1) or 1)
-				fn = (getattr(att, "FileName", "") or "").lower()
-				if attType in (5, 6) or fn.startswith("image") or fn.startswith("oledata") or not fn:
+				if _is_attachment_inline_image(att):
 					inlineCount += 1
 			except Exception:
 				pass
@@ -2233,17 +2275,6 @@ def _custom_UIAGridRow_get_name_impl(self):
 
 		cleanName = name.strip().lower()
 
-		# Załączniki w komórce
-		if _is_attachment_text(cleanName):
-			if realAttCount == 0:
-				realAttCount = _extract_attachment_count(cleanName) or 1
-			continue
-
-		# Stan nieprzeczytania w komórce
-		if cleanName in UNREAD_TOKENS:
-			unread = True
-			continue
-
 		# Odpowiedź / przesłanie w komórce
 		if cleanName in FORWARD_REPLY_TOKENS:
 			if not verbText:
@@ -2256,37 +2287,50 @@ def _custom_UIAGridRow_get_name_impl(self):
 			isExternalFound = True
 			continue
 
-		# Nagłówki kolumn tabeli
+		# Sprawdzenie nagłówków kolumn tabeli
 		columnHeaderTextList = []
 		isAttachmentHeader = False
-		if config.conf["documentFormatting"]["reportTableHeaders"] in (
-			ReportTableHeaders.ROWS_AND_COLUMNS,
-			ReportTableHeaders.COLUMNS,
-		):
+		try:
 			columnHeaderItems = e.getCachedPropertyValueEx(
 				UIAHandler.UIA_TableItemColumnHeaderItemsPropertyId,
 				True,
 			)
-		else:
-			columnHeaderItems = None
-
-		if columnHeaderItems:
-			columnHeaderItems = columnHeaderItems.QueryInterface(UIAHandler.IUIAutomationElementArray)
-			for hIdx in range(columnHeaderItems.length):
-				columnHeaderItem = columnHeaderItems.getElement(hIdx)
-				hName = columnHeaderItem.currentName
-				hClean = hName.strip().lower() if hName else ""
-				if _is_attachment_text(hClean):
-					isAttachmentHeader = True
-					if realAttCount == 0:
-						realAttCount = _extract_attachment_count(name) or 1
-				if not speakStatuses:
-					if _is_attachment_text(hClean) or hClean in UNREAD_TOKENS or hClean in FORWARD_REPLY_TOKENS or hClean in EXTERNAL_TOKENS or hClean.rstrip(":").strip() in EXTERNAL_TOKENS:
-						continue
-				columnHeaderTextList.append(hName)
+			if columnHeaderItems:
+				columnHeaderItems = columnHeaderItems.QueryInterface(UIAHandler.IUIAutomationElementArray)
+				for hIdx in range(columnHeaderItems.length):
+					columnHeaderItem = columnHeaderItems.getElement(hIdx)
+					hName = columnHeaderItem.currentName
+					hClean = hName.strip().lower() if hName else ""
+					if any(w in hClean for w in ("załącznik", "attachment")):
+						isAttachmentHeader = True
+						if realAttCount == 0:
+							realAttCount = _extract_attachment_count(name) or 1
+					if not speakStatuses:
+						if _is_attachment_text(hClean) or hClean in UNREAD_TOKENS or hClean in READ_TOKENS or hClean in FORWARD_REPLY_TOKENS or hClean in EXTERNAL_TOKENS or hClean.rstrip(":").strip() in EXTERNAL_TOKENS:
+							continue
+					reportFlag = config.conf["documentFormatting"]["reportTableHeaders"]
+					allowedFlags = (getattr(ReportTableHeaders, "ROWS_AND_COLUMNS", 2), getattr(ReportTableHeaders, "COLUMNS", 1)) if ReportTableHeaders else (2, 1)
+					if reportFlag in allowedFlags:
+						columnHeaderTextList.append(hName)
+		except Exception:
+			pass
 
 		# Jeśli kolumna jest kolumną załączników, pomiń ją w treści, aby nie czytać surowego "1" lub "Załączniki: 1"
 		if isAttachmentHeader:
+			continue
+
+		# Załączniki w komórce (wyłącznie gdy komórka jest faktycznym znacznikiem załącznika)
+		if _is_attachment_text(cleanName):
+			if realAttCount == 0:
+				realAttCount = _extract_attachment_count(cleanName) or 1
+			continue
+
+		# Stan przeczytania / nieprzeczytania w komórce
+		if cleanName in UNREAD_TOKENS:
+			unread = True
+			continue
+		elif cleanName in READ_TOKENS:
+			unread = False
 			continue
 
 		columnHeaderText = " ".join(columnHeaderTextList)
@@ -3977,35 +4021,47 @@ def resolveMessageRangeInWord(doc, msg) -> int:
 			if not q_clean or len(q_clean) < 3:
 				continue
 
+			matches = []
 			find_rng = doc.Content
 			find_rng.Find.ClearFormatting()
-			found = find_rng.Find.Execute(
+			while find_rng.Find.Execute(
 				FindText=q_clean[:80],
 				MatchCase=False,
 				MatchWholeWord=False,
 				Forward=True,
 				Wrap=0  # wdFindStop
-			)
-			if found:
+			):
 				p = find_rng.Paragraphs(1)
 				start_pos = int(p.Range.Start)
 
 				try:
+					cur_p = p
 					for _ in range(3):
-						prev_p = p.Previous()
+						prev_p = cur_p.Previous()
 						if not prev_p:
 							break
 						prev_text = str(prev_p.Range.Text or "").strip().lower()
 						if any(prev_text.startswith(kw) for kw in ("od:", "from:", "von:", "de:", "-----", "_____")):
 							start_pos = int(prev_p.Range.Start)
-							p = prev_p
+							cur_p = prev_p
 						else:
 							break
 				except Exception:
 					pass
 
-				msg.real_range_start = start_pos
-				return start_pos
+				matches.append(start_pos)
+				try:
+					if find_rng.End >= doc.Content.End:
+						break
+					find_rng = doc.Range(find_rng.End, doc.Content.End)
+				except Exception:
+					break
+
+			if matches:
+				expected_pos = getattr(msg, "range_start", 0)
+				best_pos = min(matches, key=lambda m_pos: abs(m_pos - expected_pos))
+				msg.real_range_start = best_pos
+				return best_pos
 	except Exception as ex:
 		log.debug(f"outlookSpeechFilter: resolveMessageRangeInWord błąd: {ex}")
 
@@ -4539,6 +4595,34 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		"kb:insert+alt+end": "lastThreadMessage",
 		"kb:alt+insert+end": "lastThreadMessage",
 	}
+
+	def getScript(self, gesture):
+		script = super().getScript(gesture)
+		if not script:
+			return None
+		script_name = getattr(script, "__name__", "")
+		outlook_scripts = {
+			"script_showEmailThreadStructure",
+			"script_nextThreadMessage",
+			"script_prevThreadMessage",
+			"script_firstThreadMessage",
+			"script_lastThreadMessage",
+			"script_reportAllMessageStatuses",
+		}
+		if script_name in outlook_scripts:
+			# Jeśli Outlook nie jest aktywny, zwracamy None, aby NVDA
+			# przekazało gest do właściwego programu lub innego dodatku (np. listy elementów F7 w przeglądarce).
+			if not self._is_outlook_active():
+				return None
+			# Jeśli to nawigacja po wątku:
+			if script_name == "script_showEmailThreadStructure":
+				conf = config.conf.get(CONFIG_SECTION, {})
+				if not _to_bool(conf.get("threadNavigationEnabled", True), default=True):
+					return None
+				g_name = gesture.displayName.lower() if hasattr(gesture, "displayName") else ""
+				if "alt" not in g_name and not self._is_outlook_message_active():
+					return None
+		return script
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)

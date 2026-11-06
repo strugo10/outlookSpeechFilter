@@ -1,7 +1,7 @@
 {
   "name": "outlookSpeechFilter",
-  "version": "1.18.1",
+  "version": "1.18.2",
   "downloadUrl": "https://github.com/strugo10/outlookSpeechFilter/releases/latest/download/outlookSpeechFilter.nvda-addon",
-  "changelog": "Wersja 1.18.1:\n• Poprawka precyzji nawigacji: wyeliminowano przesunięcie (drift) kursora w długich wątkach mailowych dzięki wyszukiwaniu natywnemu Word.Range.Find.\n• Poprawka dostępności okna wątku (NVDA+F7): wyeliminowano blokadę wątku NVDA (wx.CallAfter), fokus natychmiast trafia na listę, a NVDA bezbłędnie wypowiada każdy zaznaczany element.\n• Dodano opcję włączania/wyłączania nawigatora wątków w ustawieniach dodatku oraz szybki skrót przełączający NVDA+Ctrl+Shift+T.\n• Zintegrowano oficjalne automatyczne aktualizacje bezpośrednio z serwisu GitHub.",
-  "minNVDAVersion": "2021.1.0"
+  "changelog": "Wersja 1.18.2:\n• Ochrona tematów maili: słowo 'załącznik' w temacie wiadomości nie jest już obcinane przez syntezator.\n• Precyzyjne wykrywanie stanu: pełne rozdzielenie filtrów wiadomości przeczytanych i nieprzeczytanych.\n• Prawidłowe rozróżnianie plików załączników (.pdf, .msg) od drobnych grafik w treści wiadomości.\n• Wyeliminowanie przejmowania skrótów poza oknem Microsoft Outlook.\n• Precyzyjne dopasowanie dat w oknie podglądu wątku bez przesunięć kursora.\n• Pełna zgodność z NVDA 2024.1+ (minimumNVDAVersion).",
+  "minNVDAVersion": "2024.1.0"
 }
