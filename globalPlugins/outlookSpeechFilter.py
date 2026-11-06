@@ -4852,6 +4852,81 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			ui.message(_t("STATUS_ONLY_OUTLOOK"))
 			return
 
+		# Sprawdź, czy użytkownik ma zaznaczonych wiele wiadomości na liście w Explorerze
+		selObj = None
+		if getattr(appMod, "nativeOm", None):
+			try:
+				selObj = appMod.nativeOm.activeExplorer().selection
+			except Exception:
+				pass
+		if not selObj and getattr(focus, "parent", None):
+			p = focus.parent
+			if getattr(p, "appModule", None) and getattr(p.appModule, "nativeOm", None):
+				try:
+					selObj = p.appModule.nativeOm.activeExplorer().selection
+				except Exception:
+					pass
+
+		selCount = int(getattr(selObj, "Count", 0)) if selObj else 0
+		if selCount > 1:
+			unreadCount = 0
+			attCount = 0
+			flaggedCount = 0
+			highCount = 0
+			limit = min(selCount, 100)
+			for i in range(1, limit + 1):
+				try:
+					item = selObj.Item(i)
+					if getattr(item, "UnRead", False):
+						unreadCount += 1
+					if int(getattr(getattr(item, "Attachments", None), "Count", 0)) > 0:
+						attCount += 1
+					if bool(getattr(item, "IsMarkedAsTask", False)) or int(getattr(item, "FlagStatus", 0)) == 2:
+						flaggedCount += 1
+					if int(getattr(item, "Importance", 1)) == 2:
+						highCount += 1
+				except Exception:
+					pass
+
+			lang = get_effective_language()
+			isPl = (lang == "pl")
+			details = []
+			if isPl:
+				if unreadCount == selCount:
+					details.append("wszystkie nieprzeczytane")
+				elif unreadCount > 0:
+					details.append(f"{unreadCount} nieprzeczytanych")
+				else:
+					details.append("wszystkie przeczytane")
+
+				if attCount > 0:
+					details.append(f"{attCount} z załącznikami")
+				if flaggedCount > 0:
+					details.append(f"{flaggedCount} oflagowanych")
+				if highCount > 0:
+					details.append(f"{highCount} o wysokim priorytecie")
+
+				msg = f"Zaznaczono {selCount} wiadomości: " + ", ".join(details)
+			else:
+				if unreadCount == selCount:
+					details.append("all unread")
+				elif unreadCount > 0:
+					details.append(f"{unreadCount} unread")
+				else:
+					details.append("all read")
+
+				if attCount > 0:
+					details.append(f"{attCount} with attachments")
+				if flaggedCount > 0:
+					details.append(f"{flaggedCount} flagged")
+				if highCount > 0:
+					details.append(f"{highCount} high importance")
+
+				msg = f"Selected {selCount} messages: " + ", ".join(details)
+
+			ui.message(msg)
+			return
+
 		# 1. Sprawdź zarejestrowane statusy na wierszu podczas ostatniego przetwarzania
 		rowStatuses = getattr(focus, "_osf_statuses", None) or getattr(focus, "_omc_statuses", None)
 		if not rowStatuses and getattr(focus, "parent", None):

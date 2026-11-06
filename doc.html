@@ -2,64 +2,397 @@
 <html lang="pl">
 <head>
 <meta charset="utf-8">
-<title>Outlook Speech Filter — Documentation / Dokumentacja</title>
-<script>
-  (function() {
-    var userLang = navigator.language || navigator.userLanguage || "";
-    if (userLang.toLowerCase().indexOf("pl") === -1) {
-      window.location.replace("doc_en.html");
-    } else {
-      window.location.replace("doc_pl.html");
-    }
-  })();
-</script>
+<title>Outlook Speech Filter — Pomoc i samouczek</title>
 <style>
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     line-height: 1.6;
-    max-width: 800px;
-    margin: 40px auto;
+    max-width: 900px;
+    margin: 30px auto;
     padding: 0 20px;
     color: #222;
-    text-align: center;
+    background: #fdfdfd;
   }
-  .lang-card {
-    display: inline-block;
-    background: #f0f7ff;
-    border: 2px solid #005a9e;
-    border-radius: 8px;
-    padding: 24px 32px;
-    margin: 15px;
-    text-decoration: none;
+  .lang-switch {
+    background: #eef2f7;
+    border: 1px solid #d0dbe7;
+    padding: 8px 14px;
+    border-radius: 6px;
+    text-align: right;
+    margin-bottom: 20px;
+    font-size: 0.95em;
+  }
+  .lang-switch a {
     color: #005a9e;
-    font-size: 1.2em;
+    text-decoration: none;
     font-weight: bold;
-    min-width: 260px;
-    transition: background 0.2s;
+    margin: 0 8px;
   }
-  .lang-card:hover, .lang-card:focus {
-    background: #005a9e;
-    color: #fff;
-    outline: 3px solid #ffbf47;
+  .lang-switch a:hover, .lang-switch a:focus {
+    text-decoration: underline;
+    outline: 2px solid #005a9e;
   }
+  .lang-switch .active {
+    color: #111;
+    background: #fff;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid #c2d2e2;
+  }
+  h1, h2, h3 { color: #005a9e; }
+  h1 { border-bottom: 2px solid #005a9e; padding-bottom: 10px; }
+  h2 { border-bottom: 1px solid #cce3f8; padding-bottom: 6px; margin-top: 30px; }
+  h3 { margin-top: 20px; color: #004578; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+  }
+  th, td {
+    padding: 12px;
+    border: 1px solid #ddd;
+    text-align: left;
+  }
+  th { background: #005a9e; color: #fff; }
+  tr:nth-child(even) { background: #f8f9fa; }
+  .tip {
+    background: #e7f3fe;
+    border-left: 6px solid #2196F3;
+    padding: 12px 16px;
+    margin: 15px 0;
+    border-radius: 4px;
+  }
+  .info-box {
+    background: #f0f7ff;
+    border: 1px solid #cce3f8;
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 20px 0;
+  }
+  .info-box p { margin: 6px 0; }
+  kbd, .shortcut {
+    background: #eee;
+    padding: 2px 6px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.9em;
+    font-weight: bold;
+    box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+  }
+  ul, ol { padding-left: 25px; }
+  li { margin-bottom: 6px; }
 </style>
 </head>
 <body>
 
-<h1>Outlook Speech Filter — Documentation / Dokumentacja</h1>
-<p>Wybierz wersję językową dokumentacji / Please select documentation language:</p>
-
-<div>
-  <a class="lang-card" href="doc_pl.html" lang="pl">
-    Dokumentacja po polsku<br>
-    <small style="font-weight: normal; font-size: 0.8em; color: inherit;">(Pomoc i samouczek)</small>
-  </a>
-
-  <a class="lang-card" href="doc_en.html" lang="en">
-    English Documentation<br>
-    <small style="font-weight: normal; font-size: 0.8em; color: inherit;">(Help &amp; Tutorial)</small>
-  </a>
+<div class="lang-switch" role="navigation" aria-label="Wybór języka dokumentacji">
+  <span>Język / Language:</span>
+  <span class="active" lang="pl">Polski</span>
+  <a href="doc_en.html" lang="en">English</a>
 </div>
+
+<h1>Outlook Speech Filter — Pomoc i samouczek</h1>
+
+<div class="info-box">
+  <p><strong>Wersja:</strong> 1.16.4 (Kompilacja: Build 20261021.6)</p>
+  <p><strong>Data kompilacji:</strong> 21 października 2026 r.</p>
+  <p><strong>Autor:</strong> <strong>Sławomir Strugarek</strong> (z nieocenioną pomocą sztucznej inteligencji <strong>Antigravity</strong> — Google DeepMind)</p>
+  <p><strong>Kompatybilność:</strong> NVDA 2021.1 – 2026.1+ | Microsoft Outlook 2013, 2016, 2019, 2021, Microsoft 365 (wersja klasyczna)</p>
+</div>
+
+<p>Dodatek dla czytnika ekranu <strong>NVDA</strong> służący do wyciszania zbędnych komunikatów mowy podczas przeglądania wiadomości w skrzynce programu <strong>Microsoft Outlook</strong> (wersja klasyczna) oraz opcjonalnego zastępowania ich <strong>dyskretnymi sygnałami dźwiękowymi (earconami)</strong>.</p>
+
+<div class="tip">
+  <strong>Główne korzyści:</strong>
+  <ul>
+    <li>NVDA nie czyta już długich prefiksów („nieprzeczytana, ma załącznik, odpowiedziano, zewnętrzna...”), lecz od razu zaczyna od <strong>nadawcy, tematu i daty</strong>. Stan wiadomości jest sygnalizowany w tle błyskawicznym dźwiękiem.</li>
+    <li>Kolejność dźwięków <strong>w 100% odpowiada kolejności wypowiadanych komunikatów mowy</strong> (zarówno gdy komunikaty są włączone, jak i podczas odpytywania o cechy wiadomości skrótem klawiszowym).</li>
+    <li>W skrzynkach z <strong>grupowaniem według flag lub kategorii</strong> eliminuje tasiemcowe powtórzenia (typu <em>„Grupuj według: Zwinięte: Kategorie: do odpowiedzi pomarańczowa...”</em>) i wypowiada <strong>kolor flagi lub kategorię jako pierwszy element</strong> (np. <em>„do odpowiedzi pomarańczowa, 125 elementów, zwinięte”</em>).</li>
+    <li><strong>Wsparcie dwujęzyczne:</strong> automatyczne dopasowanie do języka NVDA i systemu Windows (polski dla języka polskiego, angielski dla wszystkich pozostałych) oraz możliwość ręcznego wyboru języka w ustawieniach dodatku.</li>
+  </ul>
+</div>
+
+<h2>Zasada działania dodatku</h2>
+
+<h3>Wyciszanie zbędnych prefiksów mowy</h3>
+<p>Domyślnie w programie Microsoft Outlook podczas przechodzenia strzałkami po liście wiadomości NVDA odczytuje m.in.:</p>
+<ul>
+  <li>stan przeczytania (<em>nieprzeczytana</em>),</li>
+  <li>stan oflagowania (<em>oflagowana</em>),</li>
+  <li>obecność załączników (<em>ma załącznik</em>),</li>
+  <li>odpowiedź lub przesłanie dalej (<em>odpowiedziano</em>, <em>przesłano dalej</em>),</li>
+  <li>priorytet wiadomości (<em>wysoki priorytet</em>, <em>niski priorytet</em>),</li>
+  <li>zaproszenia / terminarz (<em>żądanie spotkania</em>),</li>
+  <li>kategorie wiadomości,</li>
+  <li>znacznik wiadomości z zewnątrz (<em>wiadomość zewnętrzna</em>).</li>
+</ul>
+<p>Ten dodatek usuwa te długie gadatliwe prefiksy mowy, dzięki czemu NVDA od razu zaczyna czytać <strong>od nadawcy, tematu oraz daty wiadomości</strong>. Jednocześnie <strong>nie tracisz kontekstu</strong>, ponieważ wyciszone informacje są natychmiast sygnalizowane krótkim dźwiękiem w tle.</p>
+
+<h3>Spójność kolejności dźwięków i mowy</h3>
+<p>Kolejność odtwarzania dźwięków <strong>w 100% odpowiada kolejności wypowiadanych komunikatów mowy</strong> (zarówno przy wyłączonym wyciszaniu, jak i przy odpytywaniu o statusy bieżącej wiadomości dedykowanym skrótem klawiszowym).</p>
+
+<h3>Inteligentne czyszczenie nagłówków grup</h3>
+<p>W widokach z włączonym <strong>grupowaniem wiadomości</strong> (np. według flag lub kategorii), dodatek eliminuje uciążliwe powtórzenia systemowe typu:</p>
+<p><em>„Grupuj według: Zwinięte: Kategorie: do odpowiedzi pomarańczowa (Liczba elementów: 125) grupa...”</em></p>
+<p>i wypowiada <strong>kolor flagi lub nazwę kategorii jako pierwszy element</strong> (np. <em>„do odpowiedzi pomarańczowa, 125 elementów, zwinięte”</em>).</p>
+
+<h2>Tabela dźwięków statusów (Earcony)</h2>
+
+<p>Poniższa tabela przedstawia znaczenie poszczególnych sygnałów dźwiękowych ułożonych w <strong>kanonicznej kolejności odtwarzania</strong>:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th scope="col">Kolejność</th>
+      <th scope="col">Status / Zdarzenie</th>
+      <th scope="col">Identyfikator</th>
+      <th scope="col">Brzmienie dźwięku</th>
+      <th scope="col">Intuicyjne skojarzenie</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><strong>Nieprzeczytana</strong></td>
+      <td><code>unread</code></td>
+      <td>Czysty, wysoki „ping” (880 Hz, A5)</td>
+      <td>Tradycyjny dzwonek nowej wiadomości.</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><strong>Flaga (oflagowana)</strong></td>
+      <td><code>flag</code></td>
+      <td>Krótkie perkusyjne kliknięcie (1500 Hz)</td>
+      <td>Wbicie flagi / pinezki.</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><strong>Załącznik plikowy</strong></td>
+      <td><code>attachment</code></td>
+      <td>Pstryknięcie spinacza biurowego (motyw asocjacyjny) / marimba (motyw instrumentalny) / pojedynczy ton (motyw minimalistyczny)</td>
+      <td>Tradycyjny załącznik plikowy (PDF, Word, Excel, ZIP itp.).</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><strong>Wklejona grafika / Zrzut ekranu</strong></td>
+      <td><code>inline_image</code></td>
+      <td>Mechaniczna migawka aparatu fotograficznego (motyw asocjacyjny) / metaliczny wibrafon (motyw instrumentalny) / podwójny wznoszący ton (motyw minimalistyczny)</td>
+      <td>Obraz lub zrzut ekranu wklejony bezpośrednio w treść wiadomości e-mail.</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><strong>Odpowiedziano</strong></td>
+      <td><code>replied</code></td>
+      <td>Dwuton opadający (660 Hz &rarr; 440 Hz)</td>
+      <td>Ruch powrotny do nadawcy („odpowiedź wróciła”).</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td><strong>Przesłano dalej</strong></td>
+      <td><code>forwarded</code></td>
+      <td>Trzyton wznoszący (440 Hz &rarr; 660 Hz &rarr; 880 Hz)</td>
+      <td>Ruch wiadomości naprzód / w świat.</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td><strong>Wysoki priorytet</strong></td>
+      <td><code>importance_high</code></td>
+      <td>Dwa szybkie, ostre tony (1000 Hz)</td>
+      <td>Sygnał alarmowy: „Ważna wiadomość!”.</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td><strong>Niski priorytet</strong></td>
+      <td><code>importance_low</code></td>
+      <td>Pojedynczy, niski, miękki pomruk (280 Hz)</td>
+      <td>Spokojny dźwięk niskiej rangi.</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td><strong>Żądanie spotkania</strong></td>
+      <td><code>meeting</code></td>
+      <td>Harmonijny dzwonek kalendarza (akord C5 z alikwotami)</td>
+      <td>Terminarz / zaproszenie w kalendarzu.</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td><strong>Kategoria</strong></td>
+      <td><code>category</code></td>
+      <td>Lekko wibrujący ton (700 Hz)</td>
+      <td>Kolorowa etykieta / znacznik.</td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td><strong>Wiadomość zewnętrzna</strong></td>
+      <td><code>external</code></td>
+      <td>Krótki, podwójny niski ton</td>
+      <td>Ostrzeżenie o nadawcy spoza firmy / organizacji.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Zestawy dźwięków (Motywy)</h2>
+
+<p>W ustawieniach dodatku możesz wybrać jeden z 3 starannie zaprojektowanych zestawów dźwiękowych:</p>
+<ol>
+  <li><strong>Skojarzeniowy (Auditory Icons) — Domyślny:</strong> Naturalne dźwięki przedmiotów i czynności ze świata rzeczywistego (metaliczne pstryknięcie spinacza biurowego dla pliku, dźwięk migawki aparatu fotograficznego dla wklejonej grafiki, kryształowy dzwoneczek dla nowej wiadomości, wbicie pinezki dla flagi). Idealny do natychmiastowej, bezbłędnej orientacji bez konieczności uczenia się sztucznych dźwięków.</li>
+  <li><strong>Minimalistyczny (Elektroniczny):</strong> Nowoczesne, czyste syntezy tonowe o ściśle dobranych częstotliwościach (pojedynczy ton dla załącznika, podwójny wznoszący ton dla wklejonej grafiki).</li>
+  <li><strong>Instrumentalny (Akustyczny / Perkusyjny):</strong> Przyjemne dla ucha, organiczne instrumenty perkusyjne i dzwonkowe (marimba dla pliku, wibrafon dla grafiki, szklany dzwonek dla nowej wiadomości, drewniany woodblock dla flagi).</li>
+</ol>
+
+<h2>Domyślne ustawienia fabryczne</h2>
+
+<p>Zaraz po zainstalowaniu dodatek jest wstępnie skonfigurowany w najbardziej optymalny, przejrzysty sposób:</p>
+<ul>
+  <li><strong>Odtwarzanie dźwięków:</strong> Włączone.</li>
+  <li><strong>Wyciszanie zbędnych informacji mowy:</strong> Włączone (od razu słyszysz nadawcę i temat).</li>
+  <li><strong>Motyw dźwięków:</strong> <strong>Skojarzeniowy</strong> (asocjacyjny).</li>
+  <li><strong>Głośność dźwięków:</strong> <strong>80%</strong>.</li>
+  <li><strong>Język:</strong> Automatyczny (zgodny z NVDA i systemem).</li>
+</ul>
+
+<h3>Dźwięki aktywne domyślnie</h3>
+<ul>
+  <li><strong>Stan nieprzeczytania</strong> (włączony)</li>
+  <li><strong>Załącznik plikowy</strong> (włączony)</li>
+  <li><strong>Wklejona grafika / zrzut ekranu</strong> (włączony)</li>
+  <li><strong>Wysoki priorytet wiadomości</strong> (włączony)</li>
+  <li><strong>Żądanie spotkania</strong> (włączony)</li>
+</ul>
+
+<h3>Dźwięki wyłączone domyślnie (opcjonalne)</h3>
+<ul>
+  <li><strong>Flagi wiadomości</strong></li>
+  <li><strong>Odpowiedź na wiadomość</strong></li>
+  <li><strong>Przesłanie wiadomości dalej</strong></li>
+  <li><strong>Niski priorytet wiadomości</strong></li>
+  <li><strong>Kategorie wiadomości</strong></li>
+  <li><strong>Wiadomość zewnętrzna</strong></li>
+</ul>
+
+<h2>Przewodnik po konfiguracji w NVDA</h2>
+
+<p>Aby otworzyć okno konfiguracji dodatku:</p>
+<ol>
+  <li>Otwórz menu NVDA (<kbd>NVDA + N</kbd>).</li>
+  <li>Wybierz: <strong>Preferencje</strong> &rarr; <strong>Ustawienia...</strong> (<kbd>NVDA + Ctrl + G</kbd>).</li>
+  <li>Z listy kategorii po lewej stronie wybierz: <strong>Outlook - Filtr mowy (Outlook - Speech Filter)</strong> (lub <strong>Outlook - Speech Filter</strong>).</li>
+</ol>
+
+<h3>Wybór języka interfejsu</h3>
+<p>Na samej górze panelu znajduje się lista wyboru języka:</p>
+<ul>
+  <li><strong>Automatyczny (zgodny z NVDA i systemem)</strong> — polski dla systemu polskiego, angielski dla wszystkich pozostałych.</li>
+  <li><strong>Polski (Polish)</strong> — wymusza interfejs, komunikaty i pomoc w języku polskim.</li>
+  <li><strong>English (angielski)</strong> — wymusza interfejs, komunikaty i pomoc w języku angielskim.</li>
+</ul>
+
+<h3>Nadrzędne przełączniki</h3>
+<ul>
+  <li><strong>Włącz wyciszanie zbędnych informacji o wiadomościach</strong> — wycisza słowne komunikaty mowy o statusach wiadomości na liście w programie Outlook.</li>
+  <li><strong>Odtwarzaj dyskretne dźwięki zamiast wyciszonych komunikatów mowy</strong> — główny przełącznik odtwarzania sygnałów dźwiękowych. Gdy jest wyłączony, cały podpanel z opcjami dźwięków pozostaje zwinięty.</li>
+</ul>
+
+<h3>Dynamiczne przyciski zbiorcze (Zaznacz / Odznacz)</h3>
+<ul>
+  <li><strong>Zaznacz wszystkie dźwięki</strong> — zaznacza wszystkie 10 pól wyboru. Gdy wszystkie dźwięki są aktywne, przycisk automatycznie staje się <strong>niedostępny</strong>.</li>
+  <li><strong>Odznacz wszystkie dźwięki</strong> — odznacza wszystkie dźwięki. Gdy żaden dźwięk nie jest wybrany, przycisk staje się <strong>niedostępny</strong>.</li>
+  <li><strong>Automatyczne zwijanie i przywracanie stanu:</strong> W momencie odznaczenia wszystkich dźwięków (przyciskiem lub ręcznie) opcja odtwarzania dźwięków zostaje <strong>automatycznie wyłączona, a panel zwinięty</strong>, z przeniesieniem fokusu na nadrzędne pole wyboru. Ponowne zaznaczenie przełącznika nadrzędnego <strong>błyskawicznie przywraca stan zaznaczeń sprzed wyłączenia</strong>!</li>
+</ul>
+
+<h3>Lista 10 niezależnych dźwięków</h3>
+<p>Każde zdarzenie posiada osobne pole wyboru oraz <strong>dedykowany przycisk podglądu dźwięku</strong>, który odtwarza dany sygnał <strong>zawsze z pełną głośnością maksymalną (100%)</strong>:</p>
+<ol>
+  <li>Dźwięk stanu nieprzeczytania</li>
+  <li>Dźwięk flagi wiadomości</li>
+  <li>Dźwięk załącznika</li>
+  <li>Dźwięk odpowiedzi na wiadomość (odpowiedziano)</li>
+  <li>Dźwięk przesłania wiadomości dalej (przesłano dalej)</li>
+  <li>Dźwięk wysokiego priorytetu wiadomości</li>
+  <li>Dźwięk niskiego priorytetu wiadomości</li>
+  <li>Dźwięk żądania spotkania</li>
+  <li>Dźwięk kategorii wiadomości</li>
+  <li>Dźwięk wiadomości zewnętrznej</li>
+</ol>
+
+<h3>Suwak głośności i odsłuch sekwencyjny</h3>
+<p>Sekcja głośności znajduje się bezpośrednio pod listą dźwięków:</p>
+<ul>
+  <li><strong>Intuicyjna obsługa klawiaturą:</strong>
+    <ul>
+      <li><kbd>Strzałka w górę</kbd> / <kbd>Strzałka w prawo</kbd> — <strong>Zwiększa głośność o 1%</strong> (głośniej).</li>
+      <li><kbd>Strzałka w dół</kbd> / <kbd>Strzałka w lewo</kbd> — <strong>Zmniejsza głośność o 1%</strong> (ciszej).</li>
+      <li><kbd>Page Up</kbd> — <strong>Zwiększa głośność o 10%</strong> (głośniej).</li>
+      <li><kbd>Page Down</kbd> — <strong>Zmniejsza głośność o 10%</strong> (ciszej).</li>
+      <li><kbd>Home</kbd> — <strong>100%</strong> (maksymalna głośność).</li>
+      <li><kbd>End</kbd> — <strong>0%</strong> (całkowite wyciszenie).</li>
+    </ul>
+  </li>
+  <li><strong>Regulacja w czasie rzeczywistym:</strong> Zmiana suwaka działa natychmiastowo. Możesz przestawić głośność i od razu przejść skrótem <kbd>Alt + Tab</kbd> do Outlooka, aby sprawdzić efekt w działaniu — <strong>bez konieczności zatwierdzania zmian przyciskiem OK</strong>!</li>
+  <li><strong>Przycisk „Przetestuj głośność”:</strong> Znajdujący się obok suwaka przycisk odtwarza sekwencyjnie wszystkie dźwięki dodatku jeden po drugim z wybraną na suwaku głośnością.</li>
+</ul>
+
+<h3>Przyciski narzędziowe i kontakt</h3>
+<ul>
+  <li><strong>Pomoc kontekstowa (F1)...</strong> — otwiera natychmiastową pomoc kontekstową w dostępnym buforze przeglądania NVDA (<kbd>ui.browseableMessage</kbd>). Klawisz <kbd>F1</kbd> działa bezpośrednio w całym panelu ustawień oraz w oknie dialogowym kontaktu.</li>
+  <li><strong>Otwórz pomoc i samouczek dźwięków...</strong> — otwiera kompletną dokumentację HTML w przeglądarce w Twoim języku.</li>
+  <li><strong>Skonfiguruj skróty klawiszowe...</strong> — otwiera okno <em>Zdarzenia wejścia</em> w NVDA z automatycznym przejściem do konfiguracji skrótów dodatku.</li>
+  <li><strong>Kontakt z autorem dodatku...</strong> — otwiera okno kontaktu z możliwością skopiowania raportu diagnostycznego jednym kliknięciem do schowka i bezpośredniego przejścia do bezpiecznego, w 100% anonimowego formularza online (Google Forms). Formularz nie gromadzi adresów e-mail ani żadnych danych osobowych (pełna zgodność z RODO).</li>
+  <li><strong>Przywróć ustawienia domyślne...</strong> — bezpieczny powrót do ustawień fabrycznych (przed przywróceniem wyświetla okno potwierdzenia).</li>
+</ul>
+
+<h2>Obsługiwane skróty klawiszowe</h2>
+
+<p>Domyślne skróty klawiszowe działają niezawodnie zarówno z klawiszem <kbd>Insert</kbd>, jak i <kbd>Caps Lock</kbd> jako klawisz NVDA:</p>
+
+<h3>Nawigator wątków wiadomości (rozmów)</h3>
+<p>Inteligentne wykrywanie poszczególnych maili w długich wątkach korespondencji (zarówno w oknie otwartej wiadomości, jak i w okienku podglądu oraz na liście maili):</p>
+<ul>
+  <li><kbd>NVDA + F7</kbd> lub <kbd>NVDA + Alt + F7</kbd> — <strong>Otwiera okno struktury wątku wiadomości</strong> (wzorowane na standardowej liście elementów NVDA). Prezentuje chronologiczną listę wszystkich wiadomości w wątku z nazwiskiem nadawcy, datą oraz podglądem treści.
+    <ul>
+      <li>W oknie dialogowym dostępne jest pole szybkiego filtrowania (wpisz nazwisko lub słowo z treści).</li>
+      <li>Klawisz <kbd>Enter</kbd> natychmiast przenosi kursor w treści wiadomości na początek wybranego maila.</li>
+      <li>Klawisze <kbd>Alt + K</kbd> kopiują do schowka wyłącznie czystą treść wybranego pojedynczego maila (bez cytatów i historii rozmowy).</li>
+      <li>Klawisz <kbd>F1</kbd> wyświetla pomoc kontekstową dla okna wątku.</li>
+    </ul>
+  </li>
+  <li><kbd>NVDA + Alt + Strzałka w dół</kbd> — <strong>Skok do następnego (starszego) maila w wątku</strong> bezpośrednio podczas czytania, z dźwiękowym i głosowym potwierdzeniem.</li>
+  <li><kbd>NVDA + Alt + Strzałka w górę</kbd> — <strong>Skok do poprzedniego (nowszego) maila w wątku</strong>.</li>
+  <li><kbd>NVDA + Alt + Home</kbd> — <strong>Skok do najnowszego maila</strong> (początek wątku na samej górze).</li>
+  <li><kbd>NVDA + Alt + End</kbd> — <strong>Skok do najstarszego maila</strong> (pierwsza wiadomość rozpoczynająca wątek).</li>
+</ul>
+
+<h3>Odczyt statusów na żądanie</h3>
+<ul>
+  <li><kbd>NVDA + Shift + Z</kbd> (lub <kbd>NVDA + Control + Shift + Z</kbd>) — <strong>Odczytuje na żądanie wszystkie statusy aktualnej wiadomości mową</strong>. Niezastąpione, gdy chcesz szybko upewnić się mową, jakie cechy ma wiadomość. Odróżnia prawdziwe pliki załączników od podpisów graficznych HTML, podaje dokładną liczbę załączników, informuje o odpowiedziach, priorytetach oraz bezbłędnie wykrywa wiadomości zewnętrzne. Komunikaty mowy są zawsze ułożone w tej samej logicznej kolejności, co dźwięki.<br>
+  <strong>Obsługa zaznaczenia wielu wiadomości:</strong> Jeśli na liście maili w programie Outlook zaznaczysz kilka wiadomości (np. klawiszami z Shiftem lub Ctrl), naciśnięcie tego skrótu odczytuje zbiorcze podsumowanie zaznaczonej grupy: dokładną liczbę zaznaczonych maili, liczbę wiadomości nieprzeczytanych (lub informację, że wszystkie są przeczytane/nieprzeczytane), liczbę maili z załącznikami plikowymi, liczbę oflagowanych oraz oznaczonych wysokim priorytetem.</li>
+</ul>
+
+<h3>Szybkie przełączniki mowy i dźwięków</h3>
+<ul>
+  <li><kbd>NVDA + Control + Shift + O</kbd> — Szybkie włączenie / wyłączenie wyciszania zbędnych komunikatów mowy.</li>
+  <li><kbd>NVDA + Control + Shift + S</kbd> — Szybkie włączenie / wyłączenie odtwarzania dyskretnych dźwięków statusów.</li>
+</ul>
+
+<h3>Pomoc kontekstowa</h3>
+<ul>
+  <li><kbd>NVDA + Control + Shift + H</kbd> — <strong>Wyświetla pomoc kontekstową i spis skrótów klawiszowych dodatku</strong> w dostępnym buforze przeglądania NVDA.</li>
+  <li><kbd>F1</kbd> — <strong>Pomoc kontekstowa w oknach dialogowych</strong>: naciśnięcie klawisza F1 w panelu ustawień lub w formularzu kontaktu natychmiast otwiera podręczną pomoc i spis skrótów dla danego okna.</li>
+</ul>
+
+<h2>Kontakt z autorem i raport diagnostyczny</h2>
+<p>W przypadku pytań, pomysłów na rozwój lub napotkania problemu technicznego:</p>
+<ol>
+  <li>W oknie ustawień dodatku kliknij przycisk <strong>„Kontakt z autorem dodatku...”</strong>.</li>
+  <li>W wyświetlonym oknie kliknij przycisk <strong>„Kopiuj raport do schowka”</strong> (przy zgłoszeniu problemu technicznego), aby błyskawicznie skopiować pełny raport diagnostyczny dodatku.</li>
+  <li>Kliknij <strong>„Otwórz formularz zgłoszeniowy w przeglądarce...”</strong>. Zostaniesz bezpiecznie przekierowany do anonimowego formularza Google Forms.</li>
+  <li>W formularzu zaznacz odpowiednią kategorię zgłoszenia (np. błąd, nowa wersja językowa, pomysł lub opinia), wklej skrótem <kbd>Ctrl + V</kbd> raport w dedykowanym polu, opisz sytuację i wyślij zgłoszenie. Zgłoszenie jest w 100% anonimowe – formularz nie zbiera ani nie przetwarza żadnych danych osobowych ani adresów e-mail.</li>
+</ol>
+
+<h2>O autorach i projekcie</h2>
+<p>Dodatek <strong>Outlook Speech Filter</strong> został zaprojektowany i zrealizowany przez <strong>Sławomira Strugarka</strong> z nieocenioną pomocą asystenta sztucznej inteligencji <strong>Antigravity</strong> (Google DeepMind).</p>
+<p>Celem projektu jest uczynienie codziennej pracy z programem Microsoft Outlook maksymalnie płynną, ergonomiczną i przyjazną dla osób korzystających z czytników ekranu na całym świecie.</p>
 
 </body>
 </html>
