@@ -2,16 +2,59 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Outlook Speech Filter — Help and Tutorial</title>
+<title>Outlook Speech Filter — Help and Sound Tutorial</title>
 <style>
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     line-height: 1.6;
-    max-width: 900px;
+    max-width: 920px;
     margin: 30px auto;
     padding: 0 20px;
     color: #222;
     background: #fdfdfd;
+  }
+  @media (prefers-color-scheme: dark) {
+    body {
+      background: #121212;
+      color: #e0e0e0;
+    }
+    .lang-switch {
+      background: #1e1e1e;
+      border-color: #333;
+    }
+    .lang-switch .active {
+      color: #fff;
+      background: #2a2a2a;
+      border-color: #444;
+    }
+    th {
+      background: #004578;
+    }
+    tr:nth-child(even) {
+      background: #1a1a1a;
+    }
+    th, td {
+      border-color: #333;
+    }
+    .tip {
+      background: #102a45;
+      border-left-color: #0078d4;
+      color: #e2f0fc;
+    }
+    .info-box {
+      background: #16222f;
+      border-color: #244161;
+      color: #e0e0e0;
+    }
+    kbd, .shortcut {
+      background: #2b2b2b;
+      color: #fff;
+      border-color: #444;
+    }
+    .simulator-box {
+      background: #1a222d;
+      border-color: #2b425b;
+    }
   }
   .lang-switch {
     background: #eef2f7;
@@ -40,9 +83,15 @@
     border: 1px solid #c2d2e2;
   }
   h1, h2, h3 { color: #005a9e; }
+  @media (prefers-color-scheme: dark) {
+    h1, h2, h3 { color: #4da3ff; }
+  }
   h1 { border-bottom: 2px solid #005a9e; padding-bottom: 10px; }
-  h2 { border-bottom: 1px solid #cce3f8; padding-bottom: 6px; margin-top: 30px; }
-  h3 { margin-top: 20px; color: #004578; }
+  h2 { border-bottom: 1px solid #cce3f8; padding-bottom: 6px; margin-top: 32px; }
+  h3 { margin-top: 22px; color: #004578; }
+  @media (prefers-color-scheme: dark) {
+    h3 { color: #70b5ff; }
+  }
   table {
     width: 100%;
     border-collapse: collapse;
@@ -52,6 +101,7 @@
     padding: 12px;
     border: 1px solid #ddd;
     text-align: left;
+    vertical-align: middle;
   }
   th { background: #005a9e; color: #fff; }
   tr:nth-child(even) { background: #f8f9fa; }
@@ -82,6 +132,49 @@
   }
   ul, ol { padding-left: 25px; }
   li { margin-bottom: 6px; }
+  audio {
+    width: 220px;
+    height: 36px;
+    vertical-align: middle;
+  }
+  .simulator-box {
+    background: #f5f9fd;
+    border: 1px solid #c2dbf3;
+    border-radius: 8px;
+    padding: 18px;
+    margin: 24px 0;
+  }
+  .sim-btn {
+    background: #005a9e;
+    color: #fff;
+    border: none;
+    padding: 10px 16px;
+    margin: 6px 6px 6px 0;
+    border-radius: 5px;
+    font-size: 0.95em;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  .sim-btn:hover, .sim-btn:focus {
+    background: #004578;
+    outline: 3px solid #ffbf47;
+  }
+  .status-live {
+    margin-top: 12px;
+    padding: 10px 14px;
+    border-radius: 4px;
+    font-weight: bold;
+    background: #eef3f8;
+    border: 1px dashed #005a9e;
+    color: #004578;
+  }
+  @media (prefers-color-scheme: dark) {
+    .status-live {
+      background: #1b2633;
+      border-color: #4da3ff;
+      color: #9cd0ff;
+    }
+  }
 </style>
 </head>
 <body>
@@ -92,293 +185,310 @@
   <span class="active" lang="en">English</span>
 </div>
 
-<h1>Outlook Speech Filter — Help and Tutorial</h1>
+<h1>Outlook Speech Filter — Help and Sound Tutorial</h1>
 
 <div class="info-box">
-  <p><strong>Version:</strong> 1.16.4 (Build: 20261021.6)</p>
-  <p><strong>Release date:</strong> October 21, 2026</p>
+  <p><strong>Add-on Version:</strong> 1.20.0 (Build: 20261107.1)</p>
+  <p><strong>Release Date:</strong> November 7, 2026</p>
   <p><strong>Author:</strong> <strong>Sławomir Strugarek</strong> (with invaluable assistance from <strong>Antigravity</strong> AI — Google DeepMind)</p>
-  <p><strong>Compatibility:</strong> NVDA 2021.1 – 2026.1+ | Microsoft Outlook 2013, 2016, 2019, 2021, Microsoft 365 (Classic desktop)</p>
+  <p><strong>Screen Reader Compatibility:</strong> NVDA 2024.1 – 2026.1+</p>
+  <p><strong>Email Client Compatibility:</strong> Microsoft Outlook Classic (desktop versions 2013, 2016, 2019, 2021, and classic Microsoft 365 for Windows; not intended for the new web-based "New Outlook").</p>
+  <p><strong>Official GitHub Repository:</strong> <a href="https://github.com/strugo10/outlookSpeechFilter" target="_blank">https://github.com/strugo10/outlookSpeechFilter</a></p>
 </div>
 
-<p>An add-on for the <strong>NVDA</strong> screen reader designed to mute repetitive, verbose email status announcements when navigating the message list in <strong>Microsoft Outlook</strong> (Classic version) and optionally replace them with <strong>subtle audio cues (earcons)</strong>.</p>
+<p>An add-on for the <strong>NVDA</strong> screen reader designed to mute repetitive, verbose email status announcements when navigating the message list in <strong>Microsoft Outlook Classic</strong> and optionally replace them with <strong>subtle audio cues (earcons)</strong>.</p>
 
 <div class="tip">
-  <strong>Key Benefits:</strong>
+  <strong>Key Daily Productivity Benefits:</strong>
   <ul>
     <li>NVDA no longer reads lengthy prefixes ("unread, has attachment, replied, external..."), but immediately begins with the <strong>sender, subject, and date</strong>. The message status is instantly conveyed in the background by a brief earcon.</li>
-    <li>Sound order <strong>100% matches the sequence of speech announcements</strong> (both when speech is unmuted and when querying current message statuses with a dedicated keyboard shortcut).</li>
-    <li>In views with <strong>grouping by flags or categories</strong>, it eliminates redundant system verbosity (such as <em>"Group By: Collapsed: Categories: Orange category (Items: 125)..."</em>) and announces the <strong>category/flag name first</strong> (e.g., <em>"Orange category, 125 items, collapsed"</em>).</li>
-    <li><strong>Bilingual Support:</strong> Automatic language detection based on your NVDA and system settings (Polish for Polish systems, English for all other systems), with an explicit language switcher in settings.</li>
+    <li>Sound order <strong>100% matches the sequence of speech announcements</strong> (both when speech is unmuted and when querying current message statuses with a dedicated shortcut).</li>
+    <li><strong>Streamlined Configuration:</strong> Individual sounds are managed in a dedicated dialog (<kbd>Customize Event Sounds...</kbd>), keeping the main NVDA settings panel fast and uncluttered.</li>
+    <li><strong>3-State Checkbox:</strong> The main sound toggle natively indicates <em>"partially checked"</em> when only a subset of sounds is enabled.</li>
+    <li><strong>Share with Friends:</strong> Use <em>"Share Add-on with Others..."</em> to instantly copy download links or open a pre-filled recommendation email.</li>
+    <li>In mailboxes with <strong>grouping by flags or categories</strong>, it eliminates repetitive group prefixes and announces the flag color or category name first.</li>
+    <li><strong>Bilingual Support:</strong> Automatically matches your NVDA and Windows language (Polish for Polish systems, English for all others) with manual override available.</li>
   </ul>
 </div>
 
-<h2>Principles of Operation</h2>
+<h2>How the Add-on Works</h2>
 
-<h3>Muting Verbose Speech Prefixes</h3>
-<p>By default in Microsoft Outlook, when navigating through messages with arrow keys, NVDA announces:</p>
+<h3>Muting Unwanted Speech Prefixes</h3>
+<p>By default, when moving with arrow keys through the Outlook message list, NVDA announces:</p>
 <ul>
   <li>read/unread status (<em>unread</em>),</li>
   <li>flag status (<em>flagged</em>),</li>
-  <li>presence of attachments (<em>has attachment</em>),</li>
-  <li>reply or forward status (<em>replied</em>, <em>forwarded</em>),</li>
-  <li>message priority (<em>high importance</em>, <em>low importance</em>),</li>
-  <li>calendar invitations (<em>meeting request</em>),</li>
+  <li>attachments (<em>has attachment</em>),</li>
+  <li>inline images and screenshots in HTML email bodies,</li>
+  <li>replied or forwarded indicators (<em>replied</em>, <em>forwarded</em>),</li>
+  <li>importance (<em>high importance</em>, <em>low importance</em>),</li>
+  <li>meeting requests and calendar invites,</li>
   <li>message categories,</li>
-  <li>external sender tag (<em>external message</em>).</li>
+  <li>external sender markers (<em>external</em>).</li>
 </ul>
-<p>This add-on mutes these lengthy verbal announcements, allowing NVDA to start speaking <strong>the sender, subject, and date immediately</strong>. You lose no context, because the muted details are instantly communicated by subtle audio earcons.</p>
+<p>Outlook Speech Filter removes these repetitive prefixes so you immediately hear the <strong>sender, subject, and date</strong>, while subtle earcons keep you fully informed without speech fatigue.</p>
 
-<h3>Earcon and Speech Order Consistency</h3>
-<p>The sequence of earcon playback <strong>strictly mirrors the order of verbal announcements</strong> (both when muting is off and when pressing the status query shortcut).</p>
+<h2 id="samouczek-dzwiekow">Interactive Sound Tutorial (Earcons)</h2>
 
-<h3>Intelligent Group Header Cleaning</h3>
-<p>In message views grouped by category or flag status, verbose repetitions such as:</p>
-<p><em>"Group By: Collapsed: Categories: Orange category (Items: 125)..."</em></p>
-<p>are cleaned up to announce the <strong>category name or flag color first</strong> (e.g., <em>"Orange category, 125 items, collapsed"</em>).</p>
-
-<h2>Sound Table (10 Earcons)</h2>
-
-<p>The table below summarizes each sound cue in <strong>canonical playback sequence</strong>:</p>
+<p>Earcons are brief, intuitive acoustic signals that convey vital status attributes in a fraction of a second. Below is the canonical list of all 11 event earcons with embedded HTML5 audio players:</p>
 
 <table>
   <thead>
     <tr>
-      <th scope="col">Order</th>
-      <th scope="col">Status / Event</th>
-      <th scope="col">Identifier</th>
-      <th scope="col">Audio Characteristic</th>
+      <th scope="col">#</th>
+      <th scope="col">Event / Status</th>
+      <th scope="col">Preview Sound</th>
+      <th scope="col">Acoustic Characteristics</th>
       <th scope="col">Intuitive Association</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td>1</td>
-      <td><strong>Unread</strong></td>
-      <td><code>unread</code></td>
-      <td>Pure high ping (880 Hz, A5)</td>
-      <td>Classic new message chime.</td>
+      <td><strong>Unread message</strong></td>
+      <td>
+        <audio controls preload="none" aria-label="Preview sound: Unread message">
+          <source src="sounds/unread.wav" type="audio/wav">
+          Your browser does not support audio.
+        </audio>
+      </td>
+      <td>Clear, high chime ping (880 Hz, A5)</td>
+      <td>Traditional crystal desk chime for a new message.</td>
     </tr>
     <tr>
       <td>2</td>
-      <td><strong>Flagged</strong></td>
-      <td><code>flag</code></td>
-      <td>Crisp percussive click (1500 Hz)</td>
-      <td>Pinning / flagging marker.</td>
+      <td><strong>Flagged message</strong></td>
+      <td>
+        <audio controls preload="none" aria-label="Preview sound: Flagged message">
+          <source src="sounds/flag.wav" type="audio/wav">
+          Your browser does not support audio.
+        </audio>
+      </td>
+      <td>Short percussive click (1500 Hz)</td>
+      <td>Pushpin pinned to a task board.</td>
     </tr>
     <tr>
       <td>3</td>
-      <td><strong>File Attachment</strong></td>
-      <td><code>attachment</code></td>
-      <td>Office paperclip snap (Associative theme) / Wooden marimba (Instrumental) / Single low plum (Minimalist)</td>
-      <td>Traditional file attachment (PDF, Word, Excel, ZIP, etc.).</td>
+      <td><strong>File attachment</strong></td>
+      <td>
+        <audio controls preload="none" aria-label="Preview sound: File attachment">
+          <source src="sounds/attachment.wav" type="audio/wav">
+          Your browser does not support audio.
+        </audio>
+      </td>
+      <td>Snapping metallic paperclip</td>
+      <td>Physical paper document attachment (PDF, DOCX, XLSX, ZIP).</td>
     </tr>
     <tr>
       <td>4</td>
-      <td><strong>Inline Graphic / Screenshot</strong></td>
-      <td><code>inline_image</code></td>
-      <td>Mechanical camera shutter click (Associative theme) / Vibraphone strike (Instrumental) / Double ascending tone (Minimalist)</td>
-      <td>Graphic, screenshot or diagram embedded directly within the email body.</td>
+      <td><strong>Inline graphic / Screenshot</strong></td>
+      <td>
+        <audio controls preload="none" aria-label="Preview sound: Inline graphic or screenshot">
+          <source src="sounds/inline_image.wav" type="audio/wav">
+          Your browser does not support audio.
+        </audio>
+      </td>
+      <td>Mechanical camera shutter click</td>
+      <td>Visual photo or screenshot pasted inside the email text.</td>
     </tr>
     <tr>
       <td>5</td>
       <td><strong>Replied</strong></td>
-      <td><code>replied</code></td>
+      <td>
+        <audio controls preload="none" aria-label="Preview sound: Replied">
+          <source src="sounds/replied.wav" type="audio/wav">
+          Your browser does not support audio.
+        </audio>
+      </td>
       <td>Descending two-tone (660 Hz &rarr; 440 Hz)</td>
-      <td>Return gesture to the sender ("sent back").</td>
+      <td>Return movement to sender ("reply sent back").</td>
     </tr>
     <tr>
       <td>6</td>
       <td><strong>Forwarded</strong></td>
-      <td><code>forwarded</code></td>
+      <td>
+        <audio controls preload="none" aria-label="Preview sound: Forwarded">
+          <source src="sounds/forwarded.wav" type="audio/wav">
+          Your browser does not support audio.
+        </audio>
+      </td>
       <td>Ascending three-tone (440 Hz &rarr; 660 Hz &rarr; 880 Hz)</td>
-      <td>Outgoing gesture forwarding out into the world.</td>
+      <td>Forward movement ("passed on into the world").</td>
     </tr>
     <tr>
       <td>7</td>
-      <td><strong>High Importance</strong></td>
-      <td><code>importance_high</code></td>
-      <td>Rapid double sharp alert (1000 Hz)</td>
-      <td>Urgent alarm: "Important message!".</td>
+      <td><strong>High importance</strong></td>
+      <td>
+        <audio controls preload="none" aria-label="Preview sound: High importance">
+          <source src="sounds/importance_high.wav" type="audio/wav">
+          Your browser does not support audio.
+        </audio>
+      </td>
+      <td>Two quick, sharp warning tones (1000 Hz)</td>
+      <td>Urgent notification: "High priority item!".</td>
     </tr>
     <tr>
       <td>8</td>
-      <td><strong>Low Importance</strong></td>
-      <td><code>importance_low</code></td>
-      <td>Soft low hum (280 Hz)</td>
-      <td>Calm low-priority notification.</td>
+      <td><strong>Low importance</strong></td>
+      <td>
+        <audio controls preload="none" aria-label="Preview sound: Low importance">
+          <source src="sounds/importance_low.wav" type="audio/wav">
+          Your browser does not support audio.
+        </audio>
+      </td>
+      <td>Single gentle, low thud (280 Hz)</td>
+      <td>Subdued, non-urgent information.</td>
     </tr>
     <tr>
       <td>9</td>
-      <td><strong>Meeting Request</strong></td>
-      <td><code>meeting</code></td>
-      <td>Harmonic calendar chime (C5 chord with overtones)</td>
-      <td>Calendar schedule / meeting reminder.</td>
+      <td><strong>Meeting request</strong></td>
+      <td>
+        <audio controls preload="none" aria-label="Preview sound: Meeting request">
+          <source src="sounds/meeting.wav" type="audio/wav">
+          Your browser does not support audio.
+        </audio>
+      </td>
+      <td>Harmonic calendar bell chord (C5 with overtones)</td>
+      <td>Calendar event or business appointment.</td>
     </tr>
     <tr>
       <td>10</td>
-      <td><strong>Category</strong></td>
-      <td><code>category</code></td>
-      <td>Vibrating tone (700 Hz)</td>
-      <td>Color category tag / label.</td>
+      <td><strong>Category tag</strong></td>
+      <td>
+        <audio controls preload="none" aria-label="Preview sound: Category tag">
+          <source src="sounds/category.wav" type="audio/wav">
+          Your browser does not support audio.
+        </audio>
+      </td>
+      <td>Vibrating percussive tone (700 Hz)</td>
+      <td>Color folder label or tag.</td>
     </tr>
     <tr>
       <td>11</td>
-      <td><strong>External Message</strong></td>
-      <td><code>external</code></td>
-      <td>Brief double low tone</td>
-      <td>Security alert for senders outside your organization.</td>
+      <td><strong>External email</strong></td>
+      <td>
+        <audio controls preload="none" aria-label="Preview sound: External email">
+          <source src="sounds/external.wav" type="audio/wav">
+          Your browser does not support audio.
+        </audio>
+      </td>
+      <td>Cautious low double tone</td>
+      <td>Security alert: sender outside corporate organization.</td>
     </tr>
   </tbody>
 </table>
 
-<h2>Sound Themes</h2>
+<div class="simulator-box" role="region" aria-label="Interactive Inbox Sound Simulator">
+  <h3 style="margin-top:0;">Interactive Inbox Sound Simulator</h3>
+  <p>Test realistic email scenarios to experience how earcons play in Microsoft Outlook Classic:</p>
+  
+  <button type="button" class="sim-btn" onclick="playScenario(['unread', 'attachment', 'importance_high'], 'Scenario 1: New unread email with a PDF attachment and high priority')">
+    Scenario 1: Unread + PDF attachment + High priority
+  </button>
+  
+  <button type="button" class="sim-btn" onclick="playScenario(['replied', 'meeting', 'external'], 'Scenario 2: Replied calendar meeting invite from external sender')">
+    Scenario 2: Replied + Meeting + External sender
+  </button>
+  
+  <button type="button" class="sim-btn" onclick="playScenario(['flag', 'inline_image'], 'Scenario 3: Flagged task with inline screenshot')">
+    Scenario 3: Flagged + Inline screenshot
+  </button>
 
-<p>You can choose from 3 thoughtfully designed sound themes in the add-on settings:</p>
+  <button type="button" class="sim-btn" onclick="playScenario(['unread', 'flag', 'attachment', 'inline_image', 'replied', 'forwarded', 'importance_high', 'importance_low', 'meeting', 'category', 'external'], 'Full sequence of all 11 earcons')">
+    Full Course: Play all 11 earcons sequentially
+  </button>
+
+  <div id="sim-live" class="status-live" aria-live="polite">Select a scenario above to test the earcon playback sequence.</div>
+</div>
+
+<script>
+  function playScenario(sounds, desc) {
+    const live = document.getElementById('sim-live');
+    live.textContent = 'Playing: ' + desc + '...';
+    let idx = 0;
+    function playNext() {
+      if (idx >= sounds.length) {
+        live.textContent = 'Finished: ' + desc;
+        return;
+      }
+      const soundName = sounds[idx++];
+      const audio = new Audio('sounds/' + soundName + '.wav');
+      audio.onended = function() {
+        setTimeout(playNext, 120);
+      };
+      audio.onerror = function() {
+        setTimeout(playNext, 120);
+      };
+      audio.play().catch(function() {
+        setTimeout(playNext, 120);
+      });
+    }
+    playNext();
+  }
+</script>
+
+<h2>Sound Themes</h2>
 <ol>
-  <li><strong>Associative / Auditory Icons (Default):</strong> Natural, real-world sounds with immediate intuitive meaning (metallic paperclip snap for file attachments, mechanical camera shutter for inline graphics, crystal chime for unread messages, pin tap for flags). Ideal for instant recognition without memorizing synthetic pitches.</li>
-  <li><strong>Minimalist (Electronic):</strong> Clean, synthesized electronic tones at precisely calibrated frequencies (single tone for file attachment, double ascending plum-plum for inline graphic).</li>
-  <li><strong>Instrumental (Acoustic Percussion):</strong> Warm, organic acoustic instruments and tuned percussion (wooden marimba for file attachment, metallic vibraphone bell strike for inline graphics, glass bell for unread, woodblock for flags).</li>
+  <li><strong>Associative (Auditory Icons) — Default:</strong> Natural real-world sounds (paperclip snap, camera shutter, glass desk bell, pin click). Provides instant recognition without learning abstract tones.</li>
+  <li><strong>Minimalist (Electronic):</strong> Pure synthesized electronic sine wave tones.</li>
+  <li><strong>Instrumental (Acoustic / Percussion):</strong> Warm, organic acoustic instruments (marimba, vibraphone, chimes, woodblock).</li>
 </ol>
 
-<h2>Factory Defaults</h2>
-
-<p>Immediately after installation, the add-on is preconfigured with optimal defaults:</p>
-<ul>
-  <li><strong>Sound playback:</strong> Enabled.</li>
-  <li><strong>Mute unwanted speech:</strong> Enabled (you immediately hear the sender and subject).</li>
-  <li><strong>Sound theme:</strong> <strong>Associative</strong> (default).</li>
-  <li><strong>Sound volume:</strong> <strong>80%</strong>.</li>
-  <li><strong>Language:</strong> Automatic (matches your NVDA / system language).</li>
-</ul>
-
-<h3>Sounds Active by Default</h3>
-<ul>
-  <li><strong>Unread status</strong></li>
-  <li><strong>File attachment</strong></li>
-  <li><strong>Inline graphic / screenshot</strong></li>
-  <li><strong>High importance</strong></li>
-  <li><strong>Meeting request</strong></li>
-</ul>
-
-<h3>Optional Sounds Inactive by Default</h3>
-<ul>
-  <li><strong>Message flag</strong></li>
-  <li><strong>Replied message</strong></li>
-  <li><strong>Forwarded message</strong></li>
-  <li><strong>Low importance</strong></li>
-  <li><strong>Message category</strong></li>
-  <li><strong>External message</strong></li>
-</ul>
-
-<h2>Configuration in NVDA</h2>
-
-<p>To open the add-on settings:</p>
+<h2>Settings Guide</h2>
 <ol>
   <li>Open the NVDA Menu (<kbd>NVDA + N</kbd>).</li>
-  <li>Navigate to: <strong>Preferences</strong> &rarr; <strong>Settings...</strong> (<kbd>NVDA + Ctrl + G</kbd>).</li>
-  <li>In the categories list on the left, select: <strong>Outlook - Speech Filter</strong> (or <strong>Outlook - Filtr mowy (Outlook - Speech Filter)</strong> when set to Polish).</li>
+  <li>Go to <strong>Preferences</strong> &rarr; <strong>Settings...</strong> (<kbd>NVDA + Ctrl + G</kbd>).</li>
+  <li>Select <strong>Outlook - Speech Filter</strong> from the categories list.</li>
 </ol>
 
-<h3>Language Selection</h3>
-<p>At the top of the panel, you can choose:</p>
+<h3>Settings Structure</h3>
 <ul>
-  <li><strong>Automatic (match NVDA and system)</strong> — uses Polish if NVDA or Windows is set to Polish, and English for all other systems.</li>
-  <li><strong>Polski (Polish)</strong> — forces Polish interface, announcements, and help.</li>
-  <li><strong>English</strong> — forces English interface, announcements, and help.</li>
-</ul>
-
-<h3>Master Switches</h3>
-<ul>
-  <li><strong>Mute unwanted message status announcements in Outlook</strong> — mutes verbose speech prefixes on the message list.</li>
-  <li><strong>Play subtle earcons instead of muted speech announcements</strong> — master switch for audio cue playback. When disabled, the sound options subpanel is collapsed.</li>
-</ul>
-
-<h3>Bulk Selection Buttons</h3>
-<ul>
-  <li><strong>Select all sounds</strong> — checks all 10 sound boxes. Becomes disabled when all sounds are already active.</li>
-  <li><strong>Deselect all sounds</strong> — unchecks all 10 sound boxes. Becomes disabled when no sounds are selected.</li>
-  <li><strong>Automatic Collapse and Restoration:</strong> Deselecting all sounds automatically turns off sound playback and collapses the subpanel, focusing the master checkbox. Re-checking the master switch <strong>instantly restores your previous sound selections</strong>!</li>
-</ul>
-
-<h3>Sound Checklist & Previews</h3>
-<p>Each event features its own checkbox and a <strong>dedicated sound preview button</strong>, which plays that specific earcon <strong>at full maximum volume (100%)</strong>.</p>
-
-<h3>Volume Slider and Sequential Testing</h3>
-<ul>
-  <li><strong>Keyboard Navigation:</strong>
-    <ul>
-      <li><kbd>Up Arrow</kbd> / <kbd>Right Arrow</kbd> — <strong>Increases volume by 1%</strong>.</li>
-      <li><kbd>Down Arrow</kbd> / <kbd>Left Arrow</kbd> — <strong>Decreases volume by 1%</strong>.</li>
-      <li><kbd>Page Up</kbd> — <strong>Increases volume by 10%</strong>.</li>
-      <li><kbd>Page Down</kbd> — <strong>Decreases volume by 10%</strong>.</li>
-      <li><kbd>Home</kbd> — <strong>100%</strong> (maximum).</li>
-      <li><kbd>End</kbd> — <strong>0%</strong> (mute).</li>
-    </ul>
-  </li>
-  <li><strong>Real-Time Adjustment:</strong> Changes apply instantly. You can adjust the slider and immediately <kbd>Alt + Tab</kbd> into Outlook to check the sound level — <strong>without needing to click OK first</strong>!</li>
-  <li><strong>"Test volume" Button:</strong> Sequentially plays all add-on sounds one after another at the slider's currently selected volume.</li>
-</ul>
-
-<h3>Utility and Contact Buttons</h3>
-<ul>
-  <li><strong>Contextual Help (F1)...</strong> — opens instant contextual help in NVDA's accessible browseable message buffer (<kbd>ui.browseableMessage</kbd>). The <kbd>F1</kbd> key works throughout the settings panel and contact dialog.</li>
-  <li><strong>Open Help and Sound Tutorial...</strong> — opens this complete documentation in your web browser in your chosen language.</li>
-  <li><strong>Configure shortcut gestures...</strong> — opens NVDA's <em>Input Gestures</em> dialog with the add-on category pre-selected.</li>
-  <li><strong>Contact add-on author...</strong> — opens an accessible dialog allowing you to copy the diagnostic report to your clipboard and open the 100% anonymous online feedback form (Google Forms). The form collects no email addresses or personal data (fully GDPR compliant).</li>
-  <li><strong>Restore default settings...</strong> — safely resets all settings to factory defaults after confirmation.</li>
+  <li><strong>Language:</strong> Automatic, Polish, or English.</li>
+  <li><strong>Mute unwanted message status announcements:</strong> Main speech filter toggle.</li>
+  <li><strong>Enable conversation thread navigator:</strong> Toggles thread hierarchy window and quick jump gestures.</li>
+  <li><strong>Play subtle earcons (3-state checkbox):</strong> Checked when all sounds are active, unchecked when none are, and <strong>partially checked</strong> when customized.</li>
+  <li><strong>"Customize Event Sounds..." Button:</strong> Opens the dedicated sound customization dialog.</li>
+  <li><strong>Sound Theme:</strong> Choice between Associative, Minimalist, and Instrumental.</li>
+  <li><strong>Sound Volume Slider & "Test Volume" Button:</strong> Real-time volume preview.</li>
+  <li><strong>Automatic Updates (GitHub):</strong> Automated update checks from official GitHub releases.</li>
+  <li><strong>"Share Add-on with Others..." Button:</strong> Quick sharing dialog with download links and email draft.</li>
+  <li><strong>"Contact Author (GitHub)..." Button:</strong> Direct route to submit issues on GitHub with diagnostic report copying.</li>
 </ul>
 
 <h2>Keyboard Shortcuts</h2>
 
-<p>Default shortcuts work reliably with both <kbd>Insert</kbd> and <kbd>Caps Lock</kbd> as the NVDA modifier key:</p>
-
-<h3>Email Conversation Thread Navigator</h3>
-<p>Intelligently detects individual emails within message discussion threads (in open inspector messages, reading pane, or message list):</p>
+<h3>Conversation Thread Navigator</h3>
 <ul>
-  <li><kbd>NVDA + F7</kbd> or <kbd>NVDA + Alt + F7</kbd> — <strong>Opens the conversation thread structure dialog</strong> (modeled on the standard NVDA Elements List). Displays a chronological list of all emails in the thread with sender name, date, and body snippet.
-    <ul>
-      <li>Includes real-time instant search filtering (type sender name or keyword).</li>
-      <li>Press <kbd>Enter</kbd> to jump caret directly to that email in Outlook reading window.</li>
-      <li>Press <kbd>Alt + K</kbd> to copy only the clean body of the selected email to clipboard (without quoted history).</li>
-      <li>Press <kbd>F1</kbd> to view help for the thread dialog.</li>
-    </ul>
-  </li>
-  <li><kbd>NVDA + Alt + Down Arrow</kbd> — <strong>Jump to next (older) email in thread</strong> with audio and speech announcement.</li>
-  <li><kbd>NVDA + Alt + Up Arrow</kbd> — <strong>Jump to previous (newer) email in thread</strong>.</li>
-  <li><kbd>NVDA + Alt + Home</kbd> — <strong>Jump to newest email</strong> (top of thread).</li>
-  <li><kbd>NVDA + Alt + End</kbd> — <strong>Jump to oldest email</strong> (first initial message).</li>
+  <li><kbd>NVDA + F7</kbd> or <kbd>NVDA + Alt + F7</kbd> — <strong>Opens conversation thread navigator dialog</strong> with chronological list, search filter, and instant message jump.</li>
+  <li><kbd>Alt + K</kbd> (in thread dialog) — Copies clean individual email body without reply history.</li>
+  <li><kbd>NVDA + Alt + Down Arrow</kbd> — Jump to next (older) email in thread.</li>
+  <li><kbd>NVDA + Alt + Up Arrow</kbd> — Jump to previous (newer) email in thread.</li>
+  <li><kbd>NVDA + Alt + Home</kbd> — Jump to newest email at top of thread.</li>
+  <li><kbd>NVDA + Alt + End</kbd> — Jump to oldest email starting the thread.</li>
 </ul>
 
-<h3>On-Demand Status Announcement</h3>
+<h3>On-Demand Status Reporting</h3>
 <ul>
-  <li><kbd>NVDA + Shift + Z</kbd> (or <kbd>NVDA + Control + Shift + Z</kbd>) — <strong>Speaks all statuses of the current message on demand</strong>. Identifies genuine attachments versus embedded email signature graphics, gives the exact count of attachments, announces replies, forwarded status, priority levels, and detects external messages. Announcements strictly match the sequence of earcons.<br>
-  <strong>Multiple messages selection support:</strong> When multiple messages are selected in the Outlook list (e.g. using Shift or Ctrl keys), pressing this shortcut announces a summary of the selected batch: total count of selected messages, unread count (or all read/unread), number of messages with attachments, flagged messages, and high priority messages.</li>
+  <li><kbd>NVDA + Shift + Z</kbd> — Speaks all status attributes of the current email, or summarizes multiple selected emails on demand.</li>
 </ul>
 
-<h3>Quick Toggle Switches</h3>
+<h3>Quick Toggles & Context Help</h3>
 <ul>
-  <li><kbd>NVDA + Control + Shift + O</kbd> — Quickly toggles speech muting on and off.</li>
-  <li><kbd>NVDA + Control + Shift + S</kbd> — Quickly toggles sound cue playback on and off.</li>
+  <li><kbd>NVDA + Control + Shift + O</kbd> — Quick toggle for speech muting.</li>
+  <li><kbd>NVDA + Control + Shift + S</kbd> — Quick toggle for earcon sound playback.</li>
+  <li><kbd>NVDA + Control + Shift + T</kbd> — Quick toggle for thread navigator.</li>
+  <li><kbd>NVDA + Control + Shift + H</kbd> — Contextual help and shortcuts cheat sheet.</li>
+  <li><kbd>F1</kbd> — In-dialog contextual help.</li>
 </ul>
 
-<h3>Contextual Help</h3>
-<ul>
-  <li><kbd>NVDA + Control + Shift + H</kbd> — <strong>Displays add-on contextual help and shortcuts reference</strong> in NVDA's browseable message buffer.</li>
-  <li><kbd>F1</kbd> — <strong>Contextual help in dialogs</strong>: pressing F1 in the settings panel or contact dialog immediately opens a quick reference and keyboard shortcuts list for that dialog.</li>
-</ul>
+<h2>GitHub Issues & Feedback</h2>
+<p>All feedback, feature requests, and bug reports are warmly welcome on our official GitHub repository:</p>
+<p style="text-align: center; margin: 15px 0;">
+  <a href="https://github.com/strugo10/outlookSpeechFilter/issues" target="_blank" style="font-size: 1.1em; font-weight: bold; background: #005a9e; color: #fff; padding: 10px 20px; border-radius: 6px; text-decoration: none; display: inline-block;">Open GitHub Issues</a>
+</p>
 
-<h2>Community, Feedback & Reporting Issues</h2>
-<p>User feedback, ideas for improvements, and bug reports are warmly welcome! You can submit them directly via our official GitHub project page:</p>
-<ul>
-  <li><strong>Submit an issue or feature request:</strong> <a href="https://github.com/strugo10/outlookSpeechFilter/issues" target="_blank">https://github.com/strugo10/outlookSpeechFilter/issues</a></li>
-  <li><strong>Download latest updates:</strong> <a href="https://github.com/strugo10/outlookSpeechFilter/releases" target="_blank">https://github.com/strugo10/outlookSpeechFilter/releases</a></li>
-</ul>
-<p>To report a technical issue: open add-on settings, click <strong>"Diagnostic report and add-on state..."</strong>, copy the report, and paste it into a new GitHub issue along with your comments.</p>
-
-<h2>About the Authors and Project</h2>
-<p><strong>Outlook Speech Filter</strong> was created by <strong>Sławomir Strugarek</strong> with the collaboration of the <strong>Antigravity</strong> AI assistant (Google DeepMind).</p>
-<p>The project aims to make everyday email communication in Microsoft Outlook as smooth, accessible, and enjoyable as possible for blind and visually impaired computer users worldwide.</p>
+<h2>About the Author and Project</h2>
+<p><strong>Outlook Speech Filter</strong> was designed and developed by <strong>Sławomir Strugarek</strong> in close collaboration with the <strong>Antigravity</strong> AI assistant (Google DeepMind).</p>
 
 </body>
 </html>

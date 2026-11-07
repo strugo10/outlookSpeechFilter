@@ -58,9 +58,9 @@ addonHandler.initTranslation()
 CONFIG_SECTION = "outlookSpeechFilter"
 OLD_CONFIG_SECTION = "outlookMessageCleaner"
 ADDON_NAME = "Outlook Speech Filter"
-ADDON_VERSION = "1.18.3"
-ADDON_BUILD = "20261103.2"
-ADDON_BUILD_DATE = "2026-11-03"
+ADDON_VERSION = "1.20.1"
+ADDON_BUILD = "20261107.2"
+ADDON_BUILD_DATE = "2026-11-07"
 ADDON_AUTHOR = "Sławomir Strugarek (z pomocą Antigravity)"
 ADDON_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOUNDS_DIR = os.path.join(ADDON_DIR, "sounds")
@@ -68,9 +68,14 @@ SOUNDS_CACHE_DIR = os.path.join(tempfile.gettempdir(), "nvda_osf_sounds")
 DOC_PATH = os.path.join(ADDON_DIR, "doc.html")
 DOC_PATH_PL = os.path.join(ADDON_DIR, "doc_pl.html")
 DOC_PATH_EN = os.path.join(ADDON_DIR, "doc_en.html")
-DEFAULT_FEEDBACK_FORM_URL_PL = "https://docs.google.com/forms/d/e/1FAIpQLSfylH_KLg3W2hNkck3tJ7SHj_zAExvSs5HsUwbw78Faeml64A/viewform"
-DEFAULT_FEEDBACK_FORM_URL_EN = "https://docs.google.com/forms/d/e/1FAIpQLSfVFKRn-5EDsp0cjU0fl8H0WVOdKxDcQjhHPhY9eDzG6YF_KA/viewform"
-DEFAULT_FEEDBACK_FORM_URL = DEFAULT_FEEDBACK_FORM_URL_PL
+GITHUB_REPO_URL = "https://github.com/strugo10/outlookSpeechFilter"
+GITHUB_ISSUES_URL = "https://github.com/strugo10/outlookSpeechFilter/issues"
+GITHUB_RELEASES_URL = "https://github.com/strugo10/outlookSpeechFilter/releases"
+GITHUB_LATEST_DOWNLOAD = "https://github.com/strugo10/outlookSpeechFilter/releases/latest/download/outlookSpeechFilter.nvda-addon"
+DEFAULT_UPDATE_SOURCE_URL = "https://raw.githubusercontent.com/strugo10/outlookSpeechFilter/main/update_info.json"
+DEFAULT_FEEDBACK_FORM_URL = GITHUB_ISSUES_URL
+DEFAULT_FEEDBACK_FORM_URL_PL = GITHUB_ISSUES_URL
+DEFAULT_FEEDBACK_FORM_URL_EN = GITHUB_ISSUES_URL
 
 confspec = {
 	"enabled": "boolean(default=True)",
@@ -246,13 +251,12 @@ def showContextHelp(context: str = "settings", parent=None):
 				"OUTLOOK SPEECH FILTER — CONTACT DIALOG HELP\n"
 				+ "=" * 60 + "\n\n"
 				"OPTIONS AVAILABLE IN CONTACT DIALOG:\n"
-				"- Open feedback form in web browser:\n"
-				"  Opens a 100% anonymous Google Form. No login required, no email addresses\n"
-				"  or personal data collected (fully GDPR compliant).\n"
+				"- Open GitHub Issues in browser:\n"
+				"  Opens the official GitHub Issues page for bug reports and feature requests.\n"
 				"- Copy report to clipboard:\n"
 				"  Copies a complete diagnostic report to your clipboard containing NVDA version,\n"
 				"  Windows version, add-on settings, and Outlook integration state.\n"
-				"  You can paste it (Ctrl+V) into the feedback form or forum message.\n"
+				"  You can paste it (Ctrl+V) directly into your GitHub issue.\n"
 				"- View report:\n"
 				"  Opens an accessible viewer showing the full contents of the generated technical report.\n"
 				"- Save report to Desktop:\n"
@@ -320,39 +324,51 @@ def showContextHelp(context: str = "settings", parent=None):
 				"Note: All shortcuts work with either Insert or Caps Lock as NVDA modifier key.\n"
 				"You can customize them in: NVDA Menu -> Preferences -> Input Gestures.\n"
 			)
+		elif context == "sound_customization":
+			title = "Help: Customize Event Sounds"
+			text = (
+				"OUTLOOK SPEECH FILTER — SOUND CUSTOMIZATION HELP\n"
+				+ "=" * 60 + "\n\n"
+				"OPTIONS IN THIS DIALOG:\n"
+				"- Status sounds theme:\n"
+				"  Choose between Associative (real-world icons), Minimalist (pure tones), and Instrumental (acoustic instruments).\n"
+				"- Sound volume slider & Test volume button:\n"
+				"  Adjust playback volume (0-100%) and preview sounds immediately.\n"
+				"- Select all / Deselect all buttons:\n"
+				"  Quickly toggle all status sounds at once.\n"
+				"- Status sounds list:\n"
+				"  Enable or disable individual sounds and use the Preview button next to each sound.\n\n"
+				"KEYBOARD SHORTCUTS:\n"
+				"  F1              - Show this contextual help\n"
+				"  Escape          - Cancel and close without saving changes\n"
+				"  Enter (on OK)   - Apply sound settings and close\n"
+			)
 		else:  # settings
 			title = "Help: Outlook Speech Filter Settings"
 			text = (
 				"OUTLOOK SPEECH FILTER — SETTINGS HELP\n"
 				+ "=" * 60 + "\n\n"
 				"AVAILABLE OPTIONS & SETTINGS:\n"
-				"- Interface Language:\n"
-				"  Choose add-on language: Automatic (matches NVDA/Windows), Polish, English.\n"
-				"  Switching language instantly updates all labels in the open settings panel.\n"
 				"- Mute unwanted message status announcements:\n"
 				"  Mutes verbose prefixes on the message list, allowing NVDA to read\n"
 				"  sender, subject, and date/time first.\n"
+				"- Enable conversation thread navigator (NVDA+F7):\n"
+				"  Provides structured conversation tree navigation and quick email reading.\n"
 				"- Play subtle earcons instead of muted speech announcements:\n"
-				"  Master switch for audio cue playback. Replaces muted speech messages\n"
-				"  with brief, intuitive earcons in the background.\n\n"
-				"SOUND THEMES:\n"
-				"- Associative (Default): Realistic everyday sounds (paperclip click for attachment,\n"
-				"  camera shutter for inline graphic, chime for unread message).\n"
-				"- Minimalist: Modern, subtle synthesized tones of precise frequencies.\n"
-				"- Instrumental: Pleasant acoustic instruments (marimba, vibraphone, chimes).\n\n"
-				"SOUND CHECKLIST & VOLUME CONTROL:\n"
-				"- Bulk buttons: 'Select all sounds' and 'Deselect all sounds'.\n"
-				"  Deselecting all sounds automatically collapses sound playback, and re-checking\n"
-				"  the master box instantly restores previous selections!\n"
-				"- Individual sounds: Each status has its own checkbox and full-volume test button.\n"
-				"- Volume slider: Adjust from 0% to 100%. Use Up/Down arrows (1%), PageUp/PageDown (10%),\n"
-				"  Home (100%), End (0%). Changes apply in real time — test immediately via Alt+Tab.\n"
-				"- 'Test volume' button: Sequentially plays all sounds at current slider volume.\n\n"
-				"UTILITY BUTTONS:\n"
+				"  Master switch for audio cues (supports 3 states: checked, unchecked, partially checked).\n"
+				"- Customize Event Sounds button (Alt+D):\n"
+				"  Opens dedicated window with sound theme choice, volume slider, volume preview,\n"
+				"  and independent selection of all 11 status sounds.\n"
+				"- Automatic update checks:\n"
+				"  Option to check GitHub for updates upon NVDA startup and on-demand check button.\n"
+				"- Add-on Interface Language (at bottom of dialog):\n"
+				"  Switch between Automatic, Polish, and English.\n\n"
+				"UTILITY & HELP BUTTONS:\n"
 				"- Contextual Help (F1): Displays this help buffer.\n"
-				"- User Guide / Tutorial: Opens full HTML documentation in default web browser.\n"
-				"- Contact add-on author: Opens anonymous feedback dialog and diagnostic report.\n"
+				"- Open Help: Opens full HTML documentation in default web browser.\n"
 				"- Configure shortcut gestures: Opens NVDA's Input Gestures dialog.\n"
+				"- Share add-on: Share add-on link with others.\n"
+				"- Contact add-on author: Opens GitHub issues report dialog.\n"
 				"- Restore default settings: Safely resets configuration to factory defaults.\n\n"
 				"GLOBAL KEYBOARD SHORTCUTS IN OUTLOOK:\n"
 				"  NVDA+Ctrl+Shift+O               - Toggle speech muting on and off\n"
@@ -363,18 +379,18 @@ def showContextHelp(context: str = "settings", parent=None):
 			)
 	else:
 		if context == "contact":
-			title = "Pomoc: Kontakt z autorem dodatku"
+			title = "Pomoc: Kontakt z autorem dodatku (GitHub)"
 			text = (
 				"OUTLOOK FILTR MOWY — POMOC OKNA KONTAKTU\n"
 				+ "=" * 60 + "\n\n"
 				"OPCJE DOSTĘPNE W OKNIE KONTAKTU:\n"
-				"- Otwórz formularz zgłoszeniowy w przeglądarce:\n"
-				"  Otwiera w 100% anonimowy formularz online (Google Forms). Formularz nie wymaga\n"
-				"  logowania, nie gromadzi adresów e-mail ani żadnych danych osobowych (RODO).\n"
+				"- Otwórz zgłoszenia na GitHubie (GitHub Issues):\n"
+				"  Otwiera oficjalną stronę zgłoszeń projektu na GitHubie, gdzie możesz opisać\n"
+				"  problem, zadać pytanie lub zaproponować nową funkcję.\n"
 				"- Kopiuj raport do schowka:\n"
 				"  Kopiuje do schowka kompletny raport diagnostyczny dodatku zawierający wersję NVDA,\n"
 				"  wersję systemu Windows, konfigurację dodatku i stan integracji z Outlookiem.\n"
-				"  Możesz wkleić ten raport (Ctrl+V) w formularzu zgłoszeniowym lub w wiadomości.\n"
+				"  Możesz wkleić ten raport (Ctrl+V) w treści nowego zgłoszenia na GitHubie.\n"
 				"- Wyświetl podgląd raportu:\n"
 				"  Otwiera czytelne okno podglądu z pełną treścią wygenerowanego raportu technicznego.\n"
 				"- Zapisz raport na Pulpicie:\n"
@@ -442,40 +458,51 @@ def showContextHelp(context: str = "settings", parent=None):
 				"Uwaga: Wszystkie skróty działają zarówno z klawiszem Insert, jak i Caps Lock\n"
 				"jako klawiszem NVDA. Możesz je dostosować w Menu NVDA -> Preferencje -> Zdarzenia wejścia.\n"
 			)
+		elif context == "sound_customization":
+			title = "Pomoc: Dostosuj sygnały dźwiękowe zdarzeń"
+			text = (
+				"OUTLOOK FILTR MOWY — DOSTOSOWANIE SYGNAŁÓW DŹWIĘKOWYCH\n"
+				+ "=" * 60 + "\n\n"
+				"OPCJE W TYM OKNIE:\n"
+				"- Motyw dźwięków statusów:\n"
+				"  Wybór pomiędzy motywem Skojarzeniowym (dźwięki przedmiotów: spinacz, aparat, dzwonek),\n"
+				"  Minimalistycznym (elektroniczne tony pojedyncze i podwójne) oraz Instrumentalnym (marimba, wibrafon).\n"
+				"- Suwak głośności dźwięków oraz przycisk 'Przetestuj głośność':\n"
+				"  Płynna regulacja głośności (0-100%) z możliwością natychmiastowego odsłuchania.\n"
+				"- Przyciski zbiorcze: 'Zaznacz wszystkie dźwięki' oraz 'Odznacz wszystkie dźwięki'.\n"
+				"- Lista 11 sygnałów dźwiękowych:\n"
+				"  Indywidualne włączanie/wyłączanie poszczególnych dźwięków wraz z przyciskiem 'Odsłuchaj'.\n\n"
+				"SKRÓTY KLAWISZOWE:\n"
+				"  F1              - Wyświetl tę pomoc kontekstową\n"
+				"  Escape          - Anuluj i zamknij bez zapisywania zmian\n"
+				"  Enter (na OK)   - Zastosuj i zamknij okno dźwięków\n"
+			)
 		else:  # settings
 			title = "Pomoc: Ustawienia dodatku Outlook Speech Filter"
 			text = (
 				"OUTLOOK FILTR MOWY — POMOC USTAWIEŃ DODATKU\n"
 				+ "=" * 60 + "\n\n"
 				"GŁÓWNE OPCJE I PRZEŁĄCZNIKI:\n"
-				"- Język interfejsu dodatku:\n"
-				"  Wybór języka (Automatyczny, Polski, English). Zmiana języka natychmiast\n"
-				"  aktualizuje wszystkie etykiety, przyciski i opisy w otwartym oknie.\n"
 				"- Włącz filtrowanie mowy o wiadomościach:\n"
 				"  Wycisza uciążliwe prefiksy mowy na liście maili w programie Outlook,\n"
 				"  pozwalając NVDA czytać od razu nadawcę, temat oraz datę/godzinę.\n"
+				"- Włącz nawigator wątków konwersacji (NVDA+F7):\n"
+				"  Umożliwia przeglądanie struktury korespondencji w czytelnym drzewie wiadomości.\n"
 				"- Odtwarzaj dyskretne dźwięki zamiast wyciszonych komunikatów mowy:\n"
-				"  Główny przełącznik sygnałów dźwiękowych (earconów). Zastępuje wyciszone\n"
-				"  komunikaty mowy krótkimi, intuicyjnymi dźwiękami w tle.\n\n"
-				"MOTYWY DŹWIĘKOWE:\n"
-				"- Skojarzeniowy (Domyślny): Realistyczne dźwięki przedmiotów (pstryknięcie spinacza\n"
-				"  dla załącznika, migawka aparatu dla wklejonej grafiki, dzwonek dla nowej wiadomości).\n"
-				"- Minimalistyczny: Nowoczesne, czyste syntezy tonowe o ściśle dobranych częstotliwościach.\n"
-				"- Instrumentalny: Przyjemne, organiczne instrumenty akustyczne (marimba, wibrafon, dzwonki).\n\n"
-				"LISTA DŹWIĘKÓW I REGULACJA GŁOŚNOŚCI:\n"
-				"- Przyciski zbiorcze: 'Zaznacz wszystkie dźwięki' oraz 'Odznacz wszystkie dźwięki'.\n"
-				"  Odznaczenie wszystkich dźwięków automatycznie zwija sekcję dźwiękową,\n"
-				"  a ponowne zaznaczenie opcji nadrzędnej natychmiast przywraca poprzedni zestaw!\n"
-				"- Niezależne dźwięki: Każdy status ma własne pole wyboru i przycisk odsłuchu 100%.\n"
-				"- Suwak głośności: Precyzyjna regulacja (0-100%). Obsługa klawiaturą:\n"
-				"  Strzałki (1%), PageUp/PageDown (10%), Home (100%), End (0%).\n"
-				"  Działa w czasie rzeczywistym — możesz testować głośność w Outlooku bez klikania OK!\n"
-				"- Przycisk 'Przetestuj głośność': Odtwarza sekwencyjnie wszystkie dźwięki dodatku.\n\n"
-				"PRZYCISKI NARZĘDZIOWE:\n"
+				"  Główny 3-stanowy przełącznik sygnałów dźwiękowych (earconów).\n"
+				"- Przycisk 'Dostosuj sygnały dźwiękowe...' (Alt+D):\n"
+				"  Otwiera dedykowane okno konfiguracji dźwięków, w którym możesz wybrać motyw,\n"
+				"  ustawić i przetestować głośność oraz włączyć lub wyłączyć poszczególne sygnały.\n"
+				"- Automatyczne sprawdzanie aktualizacji:\n"
+				"  Opcja sprawdzania wydań na GitHubie oraz przycisk sprawdzenia na żądanie.\n"
+				"- Język interfejsu dodatku (na dole okna):\n"
+				"  Wybór języka (Automatyczny, Polski, English).\n\n"
+				"PRZYCISKI NARZĘDZIOWE I POMOC:\n"
 				"- Pomoc kontekstowa (F1): Wyświetla niniejsze okno pomocy.\n"
-				"- Instrukcja obsługi / Samouczek: Otwiera pełną dokumentację HTML w przeglądarce.\n"
-				"- Kontakt z autorem: Otwiera anonimowy formularz zgłoszeniowy i generator raportu.\n"
+				"- Otwórz pomoc: Otwiera pełną dokumentację HTML w przeglądarce internetowej.\n"
 				"- Skonfiguruj skróty klawiszowe: Przechodzi do konfiguracji gestów w Zdarzeniach wejścia NVDA.\n"
+				"- Podziel się dodatkiem ze znajomymi: Generuje linki do pobrania z oficjalnego profilu GitHub.\n"
+				"- Kontakt z autorem: Otwiera oficjalne zgłoszenia GitHub Issues i kreator raportu.\n"
 				"- Przywróć ustawienia domyślne: Bezpiecznie przywraca fabryczną konfigurację dodatku.\n\n"
 				"GLOBALNE SKRÓTY KLAWISZOWE W PROGRAMIE OUTLOOK:\n"
 				"  NVDA+Ctrl+Shift+O               - Szybkie włączenie / wyłączenie filtrowania mowy\n"
@@ -649,8 +676,8 @@ TRANSLATIONS = {
 		"en": "Test volume",
 	},
 	"HELP_BTN": {
-		"pl": "Otwórz pomoc i samouczek dźwięków...",
-		"en": "Open Help and Sound Tutorial...",
+		"pl": "Otwórz pomoc...",
+		"en": "Open Help...",
 	},
 	"CONTEXT_HELP_BTN": {
 		"pl": "Pomoc kontekstowa (F1)...",
@@ -665,8 +692,32 @@ TRANSLATIONS = {
 		"en": "Configure shortcut gestures...",
 	},
 	"CONTACT_BTN": {
-		"pl": "Kontakt z autorem dodatku...",
-		"en": "Contact add-on author...",
+		"pl": "Kontakt z autorem (GitHub)...",
+		"en": "Contact Author (GitHub)...",
+	},
+	"CUSTOMIZE_SOUNDS_BTN": {
+		"pl": "&Dostosuj sygnały dźwiękowe...",
+		"en": "&Customize Event Sounds...",
+	},
+	"CUSTOMIZE_SOUNDS_DLG_TITLE": {
+		"pl": "Dostosuj sygnały dźwiękowe zdarzeń",
+		"en": "Customize Event Sounds",
+	},
+	"CUSTOMIZE_SOUNDS_INTRO": {
+		"pl": "Zaznacz dźwięki, które mają być odtwarzane w tle zamiast czytanych komunikatów mowy. Przy każdym dźwięku możesz nacisnąć przycisk Odsłuchaj, aby usłyszeć jego brzmienie:",
+		"en": "Select the sounds you want to play in the background instead of speech announcements. You can press the Preview button next to each sound to hear how it sounds:",
+	},
+	"SHARE_BTN": {
+		"pl": "&Podziel się dodatkiem ze znajomymi...",
+		"en": "&Share Add-on with Others...",
+	},
+	"SHARE_DLG_TITLE": {
+		"pl": "Podziel się dodatkiem ze znajomymi",
+		"en": "Share Add-on with Others",
+	},
+	"UPDATE_SOURCE_LABEL": {
+		"pl": "&Adres URL źródła aktualizacji (GitHub):",
+		"en": "&Update Source URL (GitHub):",
 	},
 	"RESTORE_DEFAULTS_BTN": {
 		"pl": "Przywróć ustawienia domyślne...",
@@ -749,20 +800,20 @@ TRANSLATIONS = {
 		"en": "Preview sound",
 	},
 	"CONTACT_DLG_TITLE": {
-		"pl": "Kontakt z autorem i zgłoszenia: Sławomir Strugarek",
-		"en": "Contact Author & Feedback: Sławomir Strugarek",
+		"pl": "Kontakt z autorem i zgłoszenia na GitHubie: Sławomir Strugarek",
+		"en": "Contact Author & GitHub Issues: Sławomir Strugarek",
 	},
 	"CONTACT_DLG_INFO": {
-		"pl": "Zgłoszenia i opinie obsługiwane są za pośrednictwem bezpiecznego formularza online (Google Forms).\nFormularz jest w 100% anonimowy – nie gromadzi adresów e-mail ani żadnych danych osobowych (pełna zgodność z RODO).",
-		"en": "Feedback and bug reports are handled via a secure online form (Google Forms).\nThe form is 100% anonymous — it does not collect email addresses or any personal data (fully GDPR compliant).",
+		"pl": "Zgłoszenia problemów, pomysły na nowe funkcje oraz kontakt z autorem realizowane są bezpośrednio w oficjalnym serwisie GitHub (GitHub Issues).\n\nMożesz skopiować poniższy raport diagnostyczny jednym kliknięciem i wkleić go w nowym zgłoszeniu na GitHubie.",
+		"en": "Bug reports, feature requests, and feedback are handled via official GitHub Issues.\n\nYou can copy the diagnostic report below with one click and paste it into a new issue on GitHub.",
 	},
 	"CONTACT_TOPIC_LABEL": {
 		"pl": "Kategoria zgłoszenia:",
 		"en": "Report category:",
 	},
 	"CONTACT_BTN_OPEN_FORM": {
-		"pl": "Otwórz formularz zgłoszeniowy w przeglądarce...",
-		"en": "Open feedback form in web browser...",
+		"pl": "Otwórz zgłoszenia na GitHubie (GitHub Issues)...",
+		"en": "Open GitHub Issues in web browser...",
 	},
 	"CONTACT_REPORT_SECTION_LABEL": {
 		"pl": "Raport diagnostyczny (zalecany przy zgłaszaniu problemów technicznych):",
@@ -1046,6 +1097,7 @@ REVERSE_MAP = {
 	"Głośność dźwięków (%):": "VOL_LABEL",
 	"Głośność dźwięków": "SLIDER_NAME",
 	"Przetestuj głośność": "TEST_VOL_BTN",
+	"Otwórz pomoc...": "HELP_BTN",
 	"Otwórz pomoc i samouczek dźwięków...": "HELP_BTN",
 	"Pomoc kontekstowa (F1)...": "CONTEXT_HELP_BTN",
 	"Pomoc (F1)...": "BTN_HELP_CONTEXT",
@@ -1318,24 +1370,24 @@ def copy_text_to_clipboard(text):
 class ContactAuthorDialog(wx.Dialog):
 	"""
 	Dostępne okno dialogowe kontaktu z autorem i zgłaszania uwag.
-	Przekierowuje do w 100% anonimowego formularza online (Google Forms),
-	bez gromadzenia adresów e-mail ani żadnych danych osobowych (RODO).
+	Przekierowuje bezpośrednio do zgłoszeń w serwisie GitHub (GitHub Issues).
 	"""
 	def __init__(self, parent, topicKey="", topicTitle=""):
 		self.topicKey = topicKey
 		self.topicTitle = topicTitle
 		dlgTitle = _t("CONTACT_DLG_TITLE")
-		super().__init__(parent, title=dlgTitle, style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER, size=(540, 370))
+		super().__init__(parent, title=dlgTitle, style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER, size=(580, 390))
+		self.SetMinSize((540, 350))
 		self.reportContent = None
 
 		mainSizer = wx.BoxSizer(wx.VERTICAL)
 
-		# 1. Informacja o anonimowości i RODO
+		# 1. Informacja o zgłoszeniach na GitHubie
 		infoText = wx.StaticText(self, label=_t("CONTACT_DLG_INFO"))
-		infoText.Wrap(500)
+		infoText.Wrap(540)
 		mainSizer.Add(infoText, flag=wx.ALL, border=10)
 
-		# 2. Główny przycisk: Otwórz formularz w przeglądarce
+		# 2. Główny przycisk: Otwórz GitHub Issues w przeglądarce
 		openBtnBox = wx.BoxSizer(wx.VERTICAL)
 		self.openFormBtn = wx.Button(self, label=_t("CONTACT_BTN_OPEN_FORM"))
 		self.openFormBtn.Bind(wx.EVT_BUTTON, self.onOpenForm)
@@ -1390,21 +1442,15 @@ class ContactAuthorDialog(wx.Dialog):
 		return self.reportContent
 
 	def onOpenForm(self, evt):
-		customUrl = config.conf.get(CONFIG_SECTION, {}).get("feedbackFormUrl", "").strip()
-		if customUrl:
-			url = customUrl
-		else:
-			lang = get_effective_language()
-			if lang == "en" and DEFAULT_FEEDBACK_FORM_URL_EN:
-				url = DEFAULT_FEEDBACK_FORM_URL_EN
-			else:
-				url = DEFAULT_FEEDBACK_FORM_URL_PL
+		url = GITHUB_ISSUES_URL
 		try:
 			os.startfile(url)
 		except Exception:
 			try:
 				import webbrowser
 				webbrowser.open(url)
+			except Exception as e:
+				log.warning(f"outlookSpeechFilter: nie można otworzyć strony GitHub: {e}")
 			except Exception as e:
 				log.warning(f"outlookSpeechFilter: nie można otworzyć formularza: {e}")
 
@@ -1468,7 +1514,7 @@ def get_active_settings_panel():
 	return None
 
 
-def _get_scaled_sound_path(sound_name, volume=None):
+def _get_scaled_sound_path(sound_name, volume=None, theme=None):
 	"""
 	Returns the path to a .wav sound file scaled to the specified volume (0-100).
 	If volume is 100, returns original file path.
@@ -1477,7 +1523,9 @@ def _get_scaled_sound_path(sound_name, volume=None):
 	"""
 	if volume is None:
 		panel = get_active_settings_panel()
-		if panel and hasattr(panel, "soundVolumeSlider"):
+		if panel and hasattr(panel, "soundVolume"):
+			volume = panel.soundVolume
+		elif panel and hasattr(panel, "soundVolumeSlider"):
 			try:
 				volume = panel.soundVolumeSlider.GetValue()
 			except Exception:
@@ -1497,16 +1545,18 @@ def _get_scaled_sound_path(sound_name, volume=None):
 	if volume <= 0:
 		return None
 
-	theme = "associative"
-	panel = get_active_settings_panel()
-	if panel and hasattr(panel, "soundThemeChoice") and hasattr(panel, "themeKeys"):
-		try:
-			selIdx = panel.soundThemeChoice.GetSelection()
-			if 0 <= selIdx < len(panel.themeKeys):
-				theme = panel.themeKeys[selIdx]
-		except Exception:
-			pass
-	if not theme or theme == "associative":
+	if theme is None:
+		panel = get_active_settings_panel()
+		if panel and hasattr(panel, "soundTheme"):
+			theme = panel.soundTheme
+		elif panel and hasattr(panel, "soundThemeChoice") and hasattr(panel, "themeKeys"):
+			try:
+				selIdx = panel.soundThemeChoice.GetSelection()
+				if 0 <= selIdx < len(panel.themeKeys):
+					theme = panel.themeKeys[selIdx]
+			except Exception:
+				pass
+	if not theme:
 		try:
 			theme = config.conf.get(CONFIG_SECTION, {}).get("soundTheme", "associative")
 		except Exception:
@@ -1562,9 +1612,9 @@ def _get_scaled_sound_path(sound_name, volume=None):
 		return orig_path
 
 
-def _play_status_sound(sound_name, volume=None):
-	"""Play a single status earcon sound file at the specified or configured volume."""
-	filepath = _get_scaled_sound_path(sound_name, volume)
+def _play_status_sound(sound_name, volume=None, theme=None):
+	"""Play a single status earcon sound file at the specified or configured volume and theme."""
+	filepath = _get_scaled_sound_path(sound_name, volume=volume, theme=theme)
 	if filepath and os.path.isfile(filepath):
 		try:
 			nvwave.playWaveFile(filepath, asynchronous=True)
@@ -1593,15 +1643,15 @@ def _stop_pending_sounds():
 		pass
 
 
-def _schedule_status_sounds_sequence(sound_names, volume=None, delay_ms=230):
+def _schedule_status_sounds_sequence(sound_names, volume=None, delay_ms=230, theme=None):
 	"""Play a sequence of sounds with spacing in ms, cancelling previous calls (for settings dialog tests)."""
 	global _pending_sound_calls
 	_stop_pending_sounds()
 	if not sound_names:
 		return
-	_play_status_sound(sound_names[0], volume=volume)
+	_play_status_sound(sound_names[0], volume=volume, theme=theme)
 	for i, name in enumerate(sound_names[1:], start=1):
-		call = wx.CallLater(i * delay_ms, lambda s=name, v=volume: _play_status_sound(s, volume=v))
+		call = wx.CallLater(i * delay_ms, lambda s=name, v=volume, t=theme: _play_status_sound(s, volume=v, theme=t))
 		_pending_sound_calls.append(call)
 
 
@@ -2668,7 +2718,10 @@ class AddonUpdaterEngine:
 
 	def get_configured_source(self) -> str:
 		conf = config.conf.get(self.config_section, {})
-		return conf.get("updateSourceUrl", "https://raw.githubusercontent.com/strugo10/outlookSpeechFilter/main/update_info.json")
+		src = str(conf.get("updateSourceUrl", DEFAULT_UPDATE_SOURCE_URL)).strip()
+		if not src or "mój dysk" in src.lower() or "moj dysk" in src.lower() or src.endswith("updates.json"):
+			return DEFAULT_UPDATE_SOURCE_URL
+		return src
 
 	def fetch_manifest(self) -> tuple[dict | None, str | None]:
 		configured = self.get_configured_source()
@@ -2676,13 +2729,10 @@ class AddonUpdaterEngine:
 		if configured:
 			candidates.append(configured.strip())
 		candidates.extend([
-			"https://raw.githubusercontent.com/strugo10/outlookSpeechFilter/main/update_info.json",
+			DEFAULT_UPDATE_SOURCE_URL,
 			"https://raw.githubusercontent.com/strugo10/outlookSpeechFilter/main/updates.json",
-			r"G:\Mój dysk\Antigravity\Nvda dodatki\updates.json",
 			os.path.join(self.addon_dir, "update_info.json"),
 			os.path.join(self.addon_dir, "updates.json"),
-			os.path.join(os.path.dirname(self.addon_dir), "updates.json"),
-			r"C:\Antigravity\Nvda dodatki\updates.json",
 		])
 
 		raw_content = None
@@ -2709,7 +2759,7 @@ class AddonUpdaterEngine:
 				continue
 
 		if not raw_content:
-			return None, str(last_err or "Nie znaleziono pliku ogłoszeniowego na dysku ani pod wskazanym adresem.")
+			return None, str(last_err or "Nie udało się połączyć z serwerem aktualizacji GitHub ani odczytać pliku ogłoszeniowego.")
 
 		try:
 			data = json.loads(raw_content)
@@ -2766,7 +2816,7 @@ class AddonUpdaterEngine:
 				wx.CallAfter(_show_dialog)
 			else:
 				if manual:
-					msg = f"Posiadasz najnowszą wersję dodatku {self.addon_title} ({self.current_version}).\nBrak nowszych aktualizacji na Twoim dysku."
+					msg = f"Posiadasz najnowszą wersję dodatku {self.addon_title} ({self.current_version}).\nBrak nowszych aktualizacji w serwisie GitHub."
 					wx.CallAfter(gui.messageBox, msg, f"Aktualizacje: {self.addon_title}", wx.OK | wx.ICON_INFORMATION)
 		except Exception as ex:
 			if manual:
@@ -2779,7 +2829,7 @@ class AddonUpdaterEngine:
 	def _worker_download_install(self, download_url: str):
 		import addonHandler
 
-		ui.message(f"Pobieranie aktualizacji dla {self.addon_title}...")
+		ui.message(f"Pobieranie aktualizacji dla {self.addon_title} z serwisu GitHub...")
 		target_pkg = None
 
 		try:
@@ -2790,15 +2840,8 @@ class AddonUpdaterEngine:
 					shutil.copyfileobj(resp, out)
 				target_pkg = tmp_file
 			else:
-				candidates = [download_url]
-				candidates.extend([
-					os.path.join(r"G:\Mój dysk\Antigravity\Nvda dodatki\Pakiety_Instalacyjne", f"{self.addon_name}.nvda-addon"),
-					os.path.join(r"C:\Antigravity\Nvda dodatki\Pakiety_Instalacyjne", f"{self.addon_name}.nvda-addon"),
-				])
-				for cand in candidates:
-					if cand and os.path.isfile(cand):
-						target_pkg = cand
-						break
+				if os.path.isfile(download_url):
+					target_pkg = download_url
 
 			if not target_pkg or not os.path.isfile(target_pkg):
 				raise FileNotFoundError(f"Nie znaleziono pliku instalacyjnego dodatku:\n{download_url}")
@@ -2829,6 +2872,409 @@ class AddonUpdaterEngine:
 			wx.CallAfter(gui.messageBox, f"Nie udało się pobrać aktualizacji:\n{ex}", f"Błąd aktualizacji: {self.addon_title}", wx.OK | wx.ICON_ERROR)
 
 
+class ShareAddonDialog(wx.Dialog):
+	"""
+	W pełni dostępne okno dialogowe umożliwiające podzielenie się dodatkiem ze znajomymi.
+	Zawiera bezpośredni link do pobrania instalatora z GitHub Releases, oficjalną stronę
+	projektu na GitHubie oraz gotową treść wiadomości e-mail polecającej dodatek.
+	"""
+	def __init__(self, parent):
+		isPl = (get_effective_language() == "pl")
+		title = _t("SHARE_DLG_TITLE")
+		super().__init__(
+			parent or gui.mainFrame,
+			title=title,
+			style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
+			size=(640, 480)
+		)
+		self.SetMinSize((600, 440))
+		mainSizer = wx.BoxSizer(wx.VERTICAL)
+
+		lblIntro = wx.StaticText(
+			self,
+			label=(
+				"Skorzystaj z poniższych przycisków, aby skopiować link do pobrania, "
+				"skopiować gotową treść lub od razu otworzyć nowy e-mail w programie Outlook:"
+				if isPl else
+				"Use the buttons below to copy the download link, copy the recommendation text, "
+				"or instantly open a new email message in Outlook:"
+			)
+		)
+		lblIntro.Wrap(600)
+		mainSizer.Add(lblIntro, 0, wx.ALL, 10)
+
+		downloadUrl = GITHUB_LATEST_DOWNLOAD
+		repoUrl = GITHUB_REPO_URL
+
+		shareBody = (
+			"Cześć,\n\n"
+			"Polecam Ci bezpłatny i w pełni dostępny dodatek dla czytnika ekranu NVDA:\n"
+			"Outlook Speech Filter – wyciszanie gadatliwości mowy i nawigator wątków (dla Microsoft Outlook Classic).\n\n"
+			"Kluczowe możliwości dodatku:\n"
+			"• Błyskawiczne wyciszenie uciążliwych i rozwlekłych prefiksów mowy (NVDA od razu czyta od nadawcy, tematu i daty),\n"
+			"• Zastąpienie zbędnych komunikatów dyskretnymi sygnałami dźwiękowymi (earconami) o spójnej logice,\n"
+			"• Dedykowane okno konfiguracji i odsłuchu dźwięków (z informacją o częściowym zaznaczeniu),\n"
+			"• Zaawansowany nawigator wątków mailowych (NVDA+F7 oraz NVDA+Alt+F7) z chronologicznym podglądem i czystym kopiowaniem (Alt+K),\n"
+			"• Szybkie skoki między mailami w wątku (NVDA+Alt+Strzałki / Home / End) bez zamykania okna,\n"
+			"• Odczyt wszystkich cech i statusów na żądanie (NVDA+Shift+Z) oraz obsługa zaznaczenia wielu maili naraz,\n"
+			"• Inteligentne czyszczenie nagłówków w skrzynkach grupowanych według flag lub kategorii.\n\n"
+			f"Bezpośredni link do pobrania najnowszej wersji instalatora (.nvda-addon):\n{downloadUrl}\n\n"
+			f"Oficjalna strona projektu na GitHubie:\n{repoUrl}\n\n"
+			"Instalacja:\n"
+			"Pobierz plik 'outlookSpeechFilter.nvda-addon' i otwórz go klawiszem Enter w Eksploratorze Windows, "
+			"a następnie potwierdź instalację w programie NVDA.\n\n"
+			"Wymagania: klasyczny program pocztowy Microsoft Outlook Classic (wersje 2013-365) oraz NVDA 2024.1+."
+		) if isPl else (
+			"Hello,\n\n"
+			"I would like to recommend a free and accessible add-on for the NVDA screen reader:\n"
+			"Outlook Speech Filter – Mute Verbosity & Thread Navigator (for Microsoft Outlook Classic).\n\n"
+			"Key Features:\n"
+			"• Mutes verbose message status prefixes (NVDA immediately reads the sender, subject, and date),\n"
+			"• Replaces status announcements with discrete, pleasant earcons,\n"
+			"• Dedicated event sound customization dialog (with native partially-checked indicator),\n"
+			"• Powerful conversation thread navigator (NVDA+F7 / NVDA+Alt+F7) with clean quote copying (Alt+K),\n"
+			"• Quick thread navigation jumping shortcuts (NVDA+Alt+Arrows / Home / End),\n"
+			"• On-demand comprehensive status report (NVDA+Shift+Z) with multi-selection support,\n"
+			"• Automatic cleanup of verbose group headers in flagged or categorized mail views.\n\n"
+			f"Direct download link for latest installer (.nvda-addon):\n{downloadUrl}\n\n"
+			f"Official GitHub Project Page:\n{repoUrl}\n\n"
+			"Installation:\n"
+			"Download 'outlookSpeechFilter.nvda-addon', press Enter in Windows Explorer to open it, "
+			"and confirm installation in NVDA.\n\n"
+			"Compatibility: Microsoft Outlook Classic (2013-365) and NVDA 2024.1+."
+		)
+
+		self.txtShare = wx.TextCtrl(
+			self,
+			value=shareBody,
+			style=wx.TE_MULTILINE | wx.TE_READONLY | wx.TE_BESTWRAP,
+			size=(-1, 230)
+		)
+		self.txtShare.SetName("Gotowy tekst wiadomości z łączami do pobrania" if isPl else "Share message text with download links")
+		mainSizer.Add(self.txtShare, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
+		btnSizer = wx.WrapSizer(wx.HORIZONTAL)
+
+		btnCopyLink = wx.Button(self, label="&Kopiuj link do pobrania" if isPl else "&Copy download link")
+		def onCopyLink(evt):
+			if copy_text_to_clipboard(downloadUrl):
+				ui.message("Skopiowano bezpośredni link do pobrania dodatku do schowka." if isPl else "Download link copied to clipboard.")
+			tones.beep(880, 50)
+		btnCopyLink.Bind(wx.EVT_BUTTON, onCopyLink)
+		btnSizer.Add(btnCopyLink, 0, wx.ALL, 4)
+
+		btnCopyMsg = wx.Button(self, label="Kopiuj &całą treść" if isPl else "Copy &entire text")
+		def onCopyMsg(evt):
+			if copy_text_to_clipboard(shareBody):
+				ui.message("Skopiowano kompletną treść polecającą do schowka." if isPl else "Recommendation text copied to clipboard.")
+			tones.beep(880, 50)
+		btnCopyMsg.Bind(wx.EVT_BUTTON, onCopyMsg)
+		btnSizer.Add(btnCopyMsg, 0, wx.ALL, 4)
+
+		btnEmail = wx.Button(self, label="&Wyślij e-mail z poleceniem..." if isPl else "&Send email recommendation...")
+		def onEmail(evt):
+			try:
+				import urllib.parse
+				subj = "Polecam bezpłatny dodatek: Outlook Speech Filter dla NVDA" if isPl else "Recommended free NVDA add-on: Outlook Speech Filter"
+				mailto = f"mailto:?subject={urllib.parse.quote(subj)}&body={urllib.parse.quote(shareBody)}"
+				os.startfile(mailto)
+			except Exception as ex:
+				log.debug(f"Share mailto error: {ex}")
+		btnEmail.Bind(wx.EVT_BUTTON, onEmail)
+		btnSizer.Add(btnEmail, 0, wx.ALL, 4)
+
+		btnClose = wx.Button(self, wx.ID_CLOSE, label="&Zamknij" if isPl else "&Close")
+		btnClose.Bind(wx.EVT_BUTTON, lambda evt: self.EndModal(wx.ID_CLOSE))
+		btnSizer.Add(btnClose, 0, wx.ALL, 4)
+
+		mainSizer.Add(btnSizer, 0, wx.ALIGN_RIGHT | wx.ALL, 8)
+		self.SetSizer(mainSizer)
+		self.Layout()
+		self.CenterOnScreen()
+
+		self.Bind(wx.EVT_CHAR_HOOK, self.onCharHook)
+		wx.CallLater(50, lambda: self.txtShare.SetFocus())
+
+	def onCharHook(self, evt):
+		if evt.GetKeyCode() == wx.WXK_ESCAPE:
+			self.EndModal(wx.ID_CLOSE)
+		else:
+			evt.Skip()
+
+
+def showShareAddonDialog(parent=None):
+	dlg = ShareAddonDialog(parent)
+	gui.mainFrame.prePopup()
+	try:
+		dlg.ShowModal()
+	finally:
+		dlg.Destroy()
+		gui.mainFrame.postPopup()
+
+
+class SoundCustomizationDialog(wx.Dialog):
+	"""
+	W pełni dostępne okno dialogowe konfiguracji i odsłuchu sygnałów dźwiękowych (earconów).
+	Pozwala wybrać motyw dźwięków, dostosować głośność, przetestować dźwięki
+	oraz zaznaczyć/odznaczyć dowolne z 11 zdarzeń i natychmiast odsłuchać każdy dźwięk.
+	"""
+	def __init__(self, parent, current_states: dict, sound_theme: str = "associative", sound_volume: int = 80):
+		isPl = (get_effective_language() == "pl")
+		dlgTitle = _t("CUSTOMIZE_SOUNDS_DLG_TITLE")
+		super().__init__(
+			parent or gui.mainFrame,
+			title=dlgTitle,
+			style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER,
+			size=(700, 620)
+		)
+		self.SetMinSize((640, 520))
+		self.sound_theme = sound_theme if sound_theme in ("associative", "minimal", "instrumental") else "associative"
+		try:
+			self.sound_volume = int(sound_volume)
+		except (ValueError, TypeError):
+			self.sound_volume = 80
+		self.states = dict(current_states)
+		self.soundCBs = []
+
+		mainSizer = wx.BoxSizer(wx.VERTICAL)
+
+		lblIntro = wx.StaticText(
+			self,
+			label=_t("CUSTOMIZE_SOUNDS_INTRO")
+		)
+		lblIntro.Wrap(660)
+		mainSizer.Add(lblIntro, 0, wx.ALL, 10)
+
+		# 1. Wybór motywu dźwięków (przeniesiony na górę tego okna)
+		themeBox = wx.BoxSizer(wx.HORIZONTAL)
+		self.themeLabel = wx.StaticText(self, label=_t("SOUND_THEME_LABEL"))
+		themeBox.Add(self.themeLabel, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=10)
+
+		self.themeKeys = ["associative", "minimal", "instrumental"]
+		themeLabels = [
+			_t("THEME_ASSOCIATIVE"),
+			_t("THEME_MINIMAL"),
+			_t("THEME_INSTRUMENTAL"),
+		]
+		self.soundThemeChoice = wx.Choice(self, choices=themeLabels)
+		self.soundThemeChoice.SetName(_t("SOUND_THEME_LABEL"))
+		themeIdx = 0
+		if self.sound_theme in self.themeKeys:
+			themeIdx = self.themeKeys.index(self.sound_theme)
+		self.soundThemeChoice.SetSelection(themeIdx)
+		self.soundThemeChoice.Bind(wx.EVT_CHOICE, self.onSoundThemeChanged)
+		themeBox.Add(self.soundThemeChoice, flag=wx.ALIGN_CENTER_VERTICAL)
+		mainSizer.Add(themeBox, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
+		# 2. Suwak głośności dźwięków oraz przycisk testowy (przeniesione na górę tego okna)
+		volBox = wx.BoxSizer(wx.HORIZONTAL)
+		self.volLabel = wx.StaticText(self, label=_t("VOL_LABEL"))
+		volBox.Add(self.volLabel, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=10)
+
+		self.soundVolumeSlider = wx.Slider(
+			self,
+			value=self.sound_volume,
+			minValue=0,
+			maxValue=100,
+			style=wx.SL_HORIZONTAL,
+		)
+		self.soundVolumeSlider.SetName(_t("SLIDER_NAME"))
+		self.soundVolumeSlider.SetPageSize(10)
+		self.soundVolumeSlider.SetLineSize(1)
+		self.soundVolumeSlider.Bind(wx.EVT_SLIDER, self.onSoundVolumeChanged)
+		self.soundVolumeSlider.Bind(wx.EVT_KEY_DOWN, self.onSliderKeyDown)
+		volBox.Add(self.soundVolumeSlider, proportion=1, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=10)
+
+		self.volValueText = wx.StaticText(self, label=f"{self.sound_volume}%")
+		volBox.Add(self.volValueText, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=10)
+
+		self.testVolBtn = wx.Button(self, label=_t("TEST_VOL_BTN"))
+		self.testVolBtn.Bind(wx.EVT_BUTTON, self.onTestSoundVolume)
+		volBox.Add(self.testVolBtn, flag=wx.ALIGN_CENTER_VERTICAL)
+		mainSizer.Add(volBox, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
+		# Separator oddzielający konfigurację ogólną dźwięków od listy
+		sepLine = wx.StaticLine(self)
+		mainSizer.Add(sepLine, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
+		# 3. Przyciski zbiorcze
+		bulkBox = wx.BoxSizer(wx.HORIZONTAL)
+		self.selectAllBtn = wx.Button(self, label=_t("SELECT_ALL_SOUNDS"))
+		self.selectAllBtn.Bind(wx.EVT_BUTTON, self.onSelectAll)
+		bulkBox.Add(self.selectAllBtn, 0, wx.RIGHT, 10)
+
+		self.deselectAllBtn = wx.Button(self, label=_t("DESELECT_ALL_SOUNDS"))
+		self.deselectAllBtn.Bind(wx.EVT_BUTTON, self.onDeselectAll)
+		bulkBox.Add(self.deselectAllBtn, 0)
+		mainSizer.Add(bulkBox, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
+		# 4. Panel z przewijaniem dla poszczególnych dźwięków
+		scrollPanel = wx.ScrolledWindow(self, style=wx.VSCROLL)
+		scrollPanel.SetScrollRate(0, 20)
+		scrollSizer = wx.BoxSizer(wx.VERTICAL)
+
+		soundDefinitions = [
+			("soundUnread", "unread", "SOUND_UNREAD", "PLAY_UNREAD", True),
+			("soundFlags", "flag", "SOUND_FLAG", "PLAY_FLAG", False),
+			("soundAttachments", "attachment", "SOUND_ATTACHMENT", "PLAY_ATTACHMENT", True),
+			("soundInlineImages", "inline_image", "SOUND_INLINE_IMAGE", "PLAY_INLINE_IMAGE", True),
+			("soundReplied", "replied", "SOUND_REPLIED", "PLAY_REPLIED", False),
+			("soundForwarded", "forwarded", "SOUND_FORWARDED", "PLAY_FORWARDED", False),
+			("soundImportanceHigh", "importance_high", "SOUND_IMPORTANCE_HIGH", "PLAY_IMPORTANCE_HIGH", True),
+			("soundImportanceLow", "importance_low", "SOUND_IMPORTANCE_LOW", "PLAY_IMPORTANCE_LOW", False),
+			("soundMeetingRequest", "meeting", "SOUND_MEETING", "PLAY_MEETING", True),
+			("soundCategories", "category", "SOUND_CATEGORY", "PLAY_CATEGORY", False),
+			("soundExternal", "external", "SOUND_EXTERNAL", "PLAY_EXTERNAL", False),
+		]
+
+		for confKey, soundName, cbKey, btnKey, defaultVal in soundDefinitions:
+			rowBox = wx.BoxSizer(wx.HORIZONTAL)
+			cb = wx.CheckBox(scrollPanel, label=_t(cbKey))
+			val = self.states.get(confKey, defaultVal)
+			cb.SetValue(_to_bool(val, default=defaultVal))
+			cb.Bind(wx.EVT_CHECKBOX, self.onCheckBoxChanged)
+			rowBox.Add(cb, 1, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
+
+			btn = wx.Button(scrollPanel, label=_t(btnKey))
+			btn.Bind(wx.EVT_BUTTON, lambda evt, s=soundName: self._playSound(s))
+			rowBox.Add(btn, 0, wx.ALIGN_CENTER_VERTICAL)
+
+			scrollSizer.Add(rowBox, 0, wx.EXPAND | wx.BOTTOM, 6)
+			self.soundCBs.append((confKey, cb, soundName))
+
+		scrollPanel.SetSizer(scrollSizer)
+		mainSizer.Add(scrollPanel, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
+		# Dolne przyciski OK / Anuluj
+		btnSizer = wx.BoxSizer(wx.HORIZONTAL)
+		self.btnOK = wx.Button(self, wx.ID_OK, label="&Zastosuj i zamknij" if isPl else "&Apply and Close")
+		self.btnOK.SetDefault()
+		btnSizer.Add(self.btnOK, 0, wx.RIGHT, 10)
+
+		self.btnCancel = wx.Button(self, wx.ID_CANCEL, label="&Anuluj" if isPl else "&Cancel")
+		btnSizer.Add(self.btnCancel, 0)
+		mainSizer.Add(btnSizer, 0, wx.ALIGN_RIGHT | wx.ALL, 10)
+
+		self.SetSizer(mainSizer)
+		self.Layout()
+		self.CenterOnScreen()
+
+		self.updateBulkButtonStates()
+		self.Bind(wx.EVT_CHAR_HOOK, self.onCharHook)
+		if hasattr(self, "soundThemeChoice") and self.soundThemeChoice:
+			wx.CallLater(50, lambda: self.soundThemeChoice.SetFocus())
+
+	def _playSound(self, soundName):
+		_stop_pending_sounds()
+		vol = self.soundVolumeSlider.GetValue() if hasattr(self, "soundVolumeSlider") and self.soundVolumeSlider else self.sound_volume
+		_play_status_sound(soundName, volume=vol, theme=self.sound_theme)
+
+	def onSoundThemeChanged(self, evt):
+		idx = self.soundThemeChoice.GetSelection()
+		if 0 <= idx < len(self.themeKeys):
+			self.sound_theme = self.themeKeys[idx]
+			_stop_pending_sounds()
+			vol = self.soundVolumeSlider.GetValue() if hasattr(self, "soundVolumeSlider") and self.soundVolumeSlider else self.sound_volume
+			_play_status_sound("attachment", volume=vol, theme=self.sound_theme)
+
+	def _updateSliderValue(self, newVal):
+		newVal = max(0, min(100, newVal))
+		self.soundVolumeSlider.SetValue(newVal)
+		self.sound_volume = newVal
+		self.volValueText.SetLabel(f"{newVal}%")
+		try:
+			ctypes.windll.user32.NotifyWinEvent(
+				0x800E,  # EVENT_OBJECT_VALUECHANGE
+				self.soundVolumeSlider.GetHandle(),
+				-4,      # OBJID_CLIENT
+				0,       # CHILDID_SELF
+			)
+		except Exception:
+			pass
+
+	def onSliderKeyDown(self, evt):
+		keyCode = evt.GetKeyCode()
+		currentVal = self.soundVolumeSlider.GetValue()
+		if keyCode in (wx.WXK_PAGEUP, getattr(wx, "WXK_NUMPAD_PAGEUP", -1)):
+			self._updateSliderValue(currentVal + 10)
+			return
+		elif keyCode in (wx.WXK_PAGEDOWN, getattr(wx, "WXK_NUMPAD_PAGEDOWN", -1)):
+			self._updateSliderValue(currentVal - 10)
+			return
+		elif keyCode in (wx.WXK_UP, wx.WXK_RIGHT, getattr(wx, "WXK_NUMPAD_UP", -1), getattr(wx, "WXK_NUMPAD_RIGHT", -1)):
+			self._updateSliderValue(currentVal + 1)
+			return
+		elif keyCode in (wx.WXK_DOWN, wx.WXK_LEFT, getattr(wx, "WXK_NUMPAD_DOWN", -1), getattr(wx, "WXK_NUMPAD_LEFT", -1)):
+			self._updateSliderValue(currentVal - 1)
+			return
+		elif keyCode in (wx.WXK_HOME, getattr(wx, "WXK_NUMPAD_HOME", -1)):
+			self._updateSliderValue(100)
+			return
+		elif keyCode in (wx.WXK_END, getattr(wx, "WXK_NUMPAD_END", -1)):
+			self._updateSliderValue(0)
+			return
+		evt.Skip()
+
+	def onSoundVolumeChanged(self, evt):
+		val = self.soundVolumeSlider.GetValue()
+		self.sound_volume = val
+		self.volValueText.SetLabel(f"{val}%")
+
+	def onTestSoundVolume(self, evt):
+		_stop_pending_sounds()
+		val = self.soundVolumeSlider.GetValue()
+		if val <= 0:
+			ui.message(_t("SOUNDS_VOL_MUTED"))
+		else:
+			_schedule_status_sounds_sequence(TEST_SOUNDS_SEQUENCE, volume=val, delay_ms=230, theme=self.sound_theme)
+
+	def onCheckBoxChanged(self, evt):
+		self.updateBulkButtonStates()
+
+	def onSelectAll(self, evt):
+		for _, cb, _ in self.soundCBs:
+			cb.SetValue(True)
+		self.updateBulkButtonStates()
+		ui.message(_t("SOUNDS_ALL_SELECTED"))
+
+	def onDeselectAll(self, evt):
+		for _, cb, _ in self.soundCBs:
+			cb.SetValue(False)
+		self.updateBulkButtonStates()
+		ui.message(_t("SOUNDS_ALL_DESELECTED"))
+
+	def updateBulkButtonStates(self):
+		total = len(self.soundCBs)
+		selected = sum(1 for _, cb, _ in self.soundCBs if cb.GetValue())
+		if hasattr(self, "selectAllBtn") and self.selectAllBtn:
+			self.selectAllBtn.Enable(selected < total)
+		if hasattr(self, "deselectAllBtn") and self.deselectAllBtn:
+			self.deselectAllBtn.Enable(selected > 0)
+
+	def getStates(self):
+		return {confKey: cb.GetValue() for confKey, cb, _ in self.soundCBs}
+
+	def getSoundTheme(self):
+		idx = self.soundThemeChoice.GetSelection()
+		if 0 <= idx < len(self.themeKeys):
+			return self.themeKeys[idx]
+		return self.sound_theme
+
+	def getSoundVolume(self):
+		if hasattr(self, "soundVolumeSlider") and self.soundVolumeSlider:
+			return int(self.soundVolumeSlider.GetValue())
+		return self.sound_volume
+
+	def onCharHook(self, evt):
+		key = evt.GetKeyCode()
+		if key == wx.WXK_ESCAPE:
+			self.EndModal(wx.ID_CANCEL)
+		elif key == wx.WXK_F1:
+			showContextHelp("sound_customization", parent=self)
+		else:
+			evt.Skip()
+
+
 class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 	title = SettingsPanelTitleDescriptor()
 
@@ -2849,7 +3295,77 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 		except Exception:
 			conf = {}
 
-		# 0. Wybór języka interfejsu dodatku (Automatyczny / Polski / English)
+		# Załaduj aktualny motyw i głośność dźwięków do pamięci panelu
+		currentTheme = conf.get("soundTheme", "associative")
+		self.soundTheme = currentTheme if currentTheme in ("associative", "minimal", "instrumental") else "associative"
+		self.initialSoundTheme = self.soundTheme
+
+		currentVol = conf.get("soundVolume", 80)
+		try:
+			currentVol = int(currentVol)
+		except (ValueError, TypeError):
+			currentVol = 80
+		self.soundVolume = currentVol
+		self.initialSoundVolume = currentVol
+
+		# 1. Filtrowanie mowy w Outlooku
+		self.enabledCB = sHelper.addItem(
+			wx.CheckBox(self, label=_t("ENABLE_FILTER"))
+		)
+		self.enabledCB.SetValue(_to_bool(conf.get("enabled", True), default=True))
+
+		# 2. Nawigator wątków
+		self.threadNavCB = sHelper.addItem(
+			wx.CheckBox(self, label=_t("ENABLE_THREAD_NAV"))
+		)
+		self.threadNavCB.SetValue(_to_bool(conf.get("threadNavigationEnabled", True), default=True))
+
+		# 3. Stan dźwięków (3-stanowe pole wyboru)
+		self.soundStates = {
+			"soundUnread": _to_bool(conf.get("soundUnread", conf.get("reportUnread", True)), default=True),
+			"soundFlags": _to_bool(conf.get("soundFlags", conf.get("reportFlags", False)), default=False),
+			"soundAttachments": _to_bool(conf.get("soundAttachments", conf.get("reportAttachments", True)), default=True),
+			"soundInlineImages": _to_bool(conf.get("soundInlineImages", conf.get("reportInlineImages", True)), default=True),
+			"soundReplied": _to_bool(conf.get("soundReplied", conf.get("reportReplied", False)), default=False),
+			"soundForwarded": _to_bool(conf.get("soundForwarded", conf.get("reportForwarded", False)), default=False),
+			"soundImportanceHigh": _to_bool(conf.get("soundImportanceHigh", conf.get("reportImportanceHigh", True)), default=True),
+			"soundImportanceLow": _to_bool(conf.get("soundImportanceLow", conf.get("reportImportanceLow", False)), default=False),
+			"soundMeetingRequest": _to_bool(conf.get("soundMeetingRequest", conf.get("reportMeetingRequest", True)), default=True),
+			"soundCategories": _to_bool(conf.get("soundCategories", conf.get("reportCategories", False)), default=False),
+			"soundExternal": _to_bool(conf.get("soundExternal", conf.get("reportExternal", False)), default=False),
+		}
+		self._lastActiveSoundStates = dict(self.soundStates)
+		self.useSoundsEnabled = _to_bool(conf.get("useSounds", True), default=True)
+
+		self.useSoundsCB = sHelper.addItem(
+			wx.CheckBox(self, label=_t("PARENT_SOUNDS_LABEL"), style=wx.CHK_3STATE)
+		)
+		self.useSoundsCB.Bind(wx.EVT_CHECKBOX, self.onUseSoundsChanged)
+
+		# Przycisk otwierający osobne okno konfiguracji dźwięków (Alt+D)
+		# (w oknie tym znajduje się motyw dźwięków, regulacja głośności z testem oraz pełna lista sygnałów)
+		soundBtnBox = wx.BoxSizer(wx.HORIZONTAL)
+		self.btnCustomizeSounds = wx.Button(self, label=_t("CUSTOMIZE_SOUNDS_BTN"))
+		self.btnCustomizeSounds.Bind(wx.EVT_BUTTON, self.onCustomizeSounds)
+		soundBtnBox.Add(self.btnCustomizeSounds, flag=wx.ALIGN_CENTER_VERTICAL)
+		sHelper.addItem(soundBtnBox)
+
+		# 4. Sekcja aktualizacji (automatyczne sprawdzanie i przycisk na żądanie)
+		settingsSizer.AddSpacer(6)
+		self.chkAutoUpdates = sHelper.addItem(
+			wx.CheckBox(self, label="&Automatycznie sprawdzaj dostępność aktualizacji przy uruchomieniu NVDA")
+		)
+		self.chkAutoUpdates.SetValue(_to_bool(conf.get("autoCheckUpdates", True), default=True))
+
+		updBtnBox = wx.BoxSizer(wx.HORIZONTAL)
+		self.checkUpdatesBtn = wx.Button(self, label="&Sprawdź dostępność aktualizacji teraz")
+		self.checkUpdatesBtn.Bind(wx.EVT_BUTTON, self.onCheckUpdatesNow)
+		updBtnBox.Add(self.checkUpdatesBtn, flag=wx.ALIGN_CENTER_VERTICAL)
+		sHelper.addItem(updBtnBox)
+
+		settingsSizer.AddSpacer(6)
+
+		# 5. Wybór języka interfejsu dodatku (przeniesiony na dół okna)
 		langBox = wx.BoxSizer(wx.HORIZONTAL)
 		self.langLabel = wx.StaticText(self, label=_t("LANG_LABEL"))
 		langBox.Add(self.langLabel, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=10)
@@ -2873,289 +3389,39 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 		langBox.Add(self.languageChoice, flag=wx.ALIGN_CENTER_VERTICAL)
 		sHelper.addItem(langBox)
 
-		self.enabledCB = sHelper.addItem(
-			wx.CheckBox(self, label=_t("ENABLE_FILTER"))
-		)
-		self.enabledCB.SetValue(_to_bool(conf.get("enabled", True), default=True))
+		settingsSizer.AddSpacer(6)
 
-		self.threadNavCB = sHelper.addItem(
-			wx.CheckBox(self, label=_t("ENABLE_THREAD_NAV"))
-		)
-		self.threadNavCB.SetValue(_to_bool(conf.get("threadNavigationEnabled", True), default=True))
-
-		# Translators: Główna opcja nadrzędna odtwarzania dyskretnych dźwięków zamiast komunikatów mowy
-		self.useSoundsCB = sHelper.addItem(
-			wx.CheckBox(self, label=_t("PARENT_SOUNDS_LABEL"))
-		)
-		self.useSoundsCB.SetValue(_to_bool(conf.get("useSounds", True), default=True))
-		self.useSoundsCB.Bind(wx.EVT_CHECKBOX, self.onUseSoundsChanged)
-
-		# Sekcja dźwięków (widoczna tylko gdy włączono dźwięki)
-		self.soundBoxSizer = wx.BoxSizer(wx.VERTICAL)
-		self.soundControls = []
-		self.childSoundCBs = []
-
-		# Wybór motywu dźwięków (asocjacyjny, minimalistyczny, instrumentalny)
-		themeBox = wx.BoxSizer(wx.HORIZONTAL)
-		self.themeLabel = wx.StaticText(self, label=_t("SOUND_THEME_LABEL"))
-		themeBox.Add(self.themeLabel, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=10)
-
-		currentTheme = conf.get("soundTheme", "associative")
-		self.initialSoundTheme = currentTheme
-		self.themeKeys = ["associative", "minimal", "instrumental"]
-		themeLabels = [
-			_t("THEME_ASSOCIATIVE"),
-			_t("THEME_MINIMAL"),
-			_t("THEME_INSTRUMENTAL"),
-		]
-		self.soundThemeChoice = wx.Choice(self, choices=themeLabels)
-		self.soundThemeChoice.SetName(_t("SOUND_THEME_LABEL"))
-		themeIdx = 0
-		if currentTheme in self.themeKeys:
-			themeIdx = self.themeKeys.index(currentTheme)
-		self.soundThemeChoice.SetSelection(themeIdx)
-		self.soundThemeChoice.Bind(wx.EVT_CHOICE, self.onSoundThemeChanged)
-		themeBox.Add(self.soundThemeChoice, flag=wx.ALIGN_CENTER_VERTICAL)
-
-		self.soundBoxSizer.Add(themeBox, flag=wx.LEFT | wx.TOP | wx.BOTTOM, border=5)
-		self.soundControls.extend([self.themeLabel, self.soundThemeChoice])
-
-		# 1. Treść wyjaśniająca pod przełącznikiem nadrzędnym
-		self.soundExplText = wx.StaticText(
-			self,
-			label=_t("SOUND_EXPL_TEXT")
-		)
-		self.soundBoxSizer.Add(self.soundExplText, flag=wx.LEFT | wx.TOP | wx.BOTTOM, border=5)
-		self.soundControls.append(self.soundExplText)
-
-		# 2. Przyciski zbiorcze: Zaznacz wszystkie / Odznacz wszystkie (umieszczone bezpośrednio pod opisem)
-		bulkBox = wx.BoxSizer(wx.HORIZONTAL)
-		self.selectAllBtn = wx.Button(self, label=_t("SELECT_ALL_SOUNDS"))
-		self.selectAllBtn.Bind(wx.EVT_BUTTON, self.onSelectAllSounds)
-		bulkBox.Add(self.selectAllBtn, flag=wx.RIGHT, border=10)
-
-		self.deselectAllBtn = wx.Button(self, label=_t("DESELECT_ALL_SOUNDS"))
-		self.deselectAllBtn.Bind(wx.EVT_BUTTON, self.onDeselectAllSounds)
-		bulkBox.Add(self.deselectAllBtn)
-
-		self.soundBoxSizer.Add(bulkBox, flag=wx.LEFT | wx.BOTTOM, border=20)
-		self.soundControls.extend([self.selectAllBtn, self.deselectAllBtn])
-
-		# 3. Podrzędna lista poszczególnych dźwięków z wcięciem 20px, w kanonicznej kolejności
-		soundListSizer = wx.BoxSizer(wx.VERTICAL)
-		self.soundChildItems = []
-
-		def addSoundOptionWithPlayBtn(cbKey, confKey, soundName, defaultVal=True, btnKey=None, fallbackKeys=None):
-			box = wx.BoxSizer(wx.HORIZONTAL)
-			cb = wx.CheckBox(self, label=_t(cbKey))
-			val = conf.get(confKey, None)
-			if val is None and fallbackKeys:
-				for fk in fallbackKeys:
-					if fk in conf:
-						val = conf[fk]
-						break
-			if val is None:
-				val = conf.get("report" + confKey[5:], defaultVal)
-			cb.SetValue(_to_bool(val, default=defaultVal))
-			cb.Bind(wx.EVT_CHECKBOX, self.onChildSoundChanged)
-			box.Add(cb, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=10)
-
-			bKey = btnKey or "PLAY_GENERIC"
-			btn = wx.Button(self, label=_t(bKey))
-			# Niezależnie od suwaka, przy każdym pojedynczym dźwięku odtwarzana jest głośność maksymalna (100)
-			btn.Bind(wx.EVT_BUTTON, lambda evt, s=soundName: self._playSingleSoundMaxVol(s))
-			box.Add(btn, flag=wx.ALIGN_CENTER_VERTICAL)
-
-			soundListSizer.Add(box, flag=wx.BOTTOM, border=5)
-			self.childSoundCBs.append(cb)
-			self.soundControls.extend([cb, btn])
-			self.soundChildItems.append((cb, cbKey, btn, bKey))
-			return cb
-
-		# 1. Nieprzeczytana (domyślnie włączony)
-		self.soundUnreadCB = addSoundOptionWithPlayBtn(
-			"SOUND_UNREAD",
-			"soundUnread",
-			"unread",
-			defaultVal=True,
-			btnKey="PLAY_UNREAD",
-		)
-
-		# 2. Flagi (domyślnie wyłączony)
-		self.soundFlagsCB = addSoundOptionWithPlayBtn(
-			"SOUND_FLAG",
-			"soundFlags",
-			"flag",
-			defaultVal=False,
-			btnKey="PLAY_FLAG",
-		)
-
-		# 3. Załączniki (domyślnie włączony)
-		self.soundAttachmentsCB = addSoundOptionWithPlayBtn(
-			"SOUND_ATTACHMENT",
-			"soundAttachments",
-			"attachment",
-			defaultVal=True,
-			btnKey="PLAY_ATTACHMENT",
-		)
-
-		# 3b. Wklejona grafika / zrzut ekranu (domyślnie włączony)
-		self.soundInlineImagesCB = addSoundOptionWithPlayBtn(
-			"SOUND_INLINE_IMAGE",
-			"soundInlineImages",
-			"inline_image",
-			defaultVal=True,
-			btnKey="PLAY_INLINE_IMAGE",
-		)
-
-		# 4. Odpowiedź na wiadomość (domyślnie wyłączony)
-		self.soundRepliedCB = addSoundOptionWithPlayBtn(
-			"SOUND_REPLIED",
-			"soundReplied",
-			"replied",
-			defaultVal=False,
-			btnKey="PLAY_REPLIED",
-			fallbackKeys=["soundForwardReply", "reportForwardReply"],
-		)
-
-		# 5. Przesłanie wiadomości dalej (domyślnie wyłączony)
-		self.soundForwardedCB = addSoundOptionWithPlayBtn(
-			"SOUND_FORWARDED",
-			"soundForwarded",
-			"forwarded",
-			defaultVal=False,
-			btnKey="PLAY_FORWARDED",
-			fallbackKeys=["soundForwardReply", "reportForwardReply"],
-		)
-
-		# 6. Wysoki priorytet wiadomości (domyślnie włączony)
-		self.soundImportanceHighCB = addSoundOptionWithPlayBtn(
-			"SOUND_IMPORTANCE_HIGH",
-			"soundImportanceHigh",
-			"importance_high",
-			defaultVal=True,
-			btnKey="PLAY_IMPORTANCE_HIGH",
-			fallbackKeys=["soundImportance", "reportImportance"],
-		)
-
-		# 7. Niski priorytet wiadomości (domyślnie wyłączony)
-		self.soundImportanceLowCB = addSoundOptionWithPlayBtn(
-			"SOUND_IMPORTANCE_LOW",
-			"soundImportanceLow",
-			"importance_low",
-			defaultVal=False,
-			btnKey="PLAY_IMPORTANCE_LOW",
-			fallbackKeys=["soundImportance", "reportImportance"],
-		)
-
-		# 8. Żądanie spotkania (domyślnie włączony)
-		self.soundMeetingRequestCB = addSoundOptionWithPlayBtn(
-			"SOUND_MEETING",
-			"soundMeetingRequest",
-			"meeting",
-			defaultVal=True,
-			btnKey="PLAY_MEETING",
-		)
-
-		# 9. Kategorie (domyślnie wyłączony)
-		self.soundCategoriesCB = addSoundOptionWithPlayBtn(
-			"SOUND_CATEGORY",
-			"soundCategories",
-			"category",
-			defaultVal=False,
-			btnKey="PLAY_CATEGORY",
-		)
-
-		# 10. Wiadomość zewnętrzna (domyślnie wyłączony)
-		self.soundExternalCB = addSoundOptionWithPlayBtn(
-			"SOUND_EXTERNAL",
-			"soundExternal",
-			"external",
-			defaultVal=False,
-			btnKey="PLAY_EXTERNAL",
-		)
-
-		self.soundBoxSizer.Add(soundListSizer, flag=wx.LEFT | wx.BOTTOM, border=20)
-
-		# 4. Sekcja głośności dźwięków (przeniesiona POD poszczególne dźwięki) oraz przycisk pełnego testu sekwencyjnego
-		volBox = wx.BoxSizer(wx.HORIZONTAL)
-		self.volLabel = wx.StaticText(self, label=_t("VOL_LABEL"))
-		volBox.Add(self.volLabel, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=10)
-
-		currentVol = conf.get("soundVolume", 80)
-		try:
-			currentVol = int(currentVol)
-		except (ValueError, TypeError):
-			currentVol = 80
-		self.initialSoundVolume = currentVol
-
-		self.soundVolumeSlider = wx.Slider(
-			self,
-			value=currentVol,
-			minValue=0,
-			maxValue=100,
-			style=wx.SL_HORIZONTAL,
-		)
-		self.soundVolumeSlider.SetName(_t("SLIDER_NAME"))
-		self.soundVolumeSlider.SetPageSize(10)
-		self.soundVolumeSlider.SetLineSize(1)
-		self.soundVolumeSlider.Bind(wx.EVT_SLIDER, self.onSoundVolumeChanged)
-		self.soundVolumeSlider.Bind(wx.EVT_KEY_DOWN, self.onSliderKeyDown)
-		volBox.Add(self.soundVolumeSlider, proportion=1, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=10)
-
-		self.volValueText = wx.StaticText(self, label=f"{currentVol}%")
-		volBox.Add(self.volValueText, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=10)
-
-		self.testVolBtn = wx.Button(self, label=_t("TEST_VOL_BTN"))
-		self.testVolBtn.Bind(wx.EVT_BUTTON, self.onTestSoundVolume)
-		volBox.Add(self.testVolBtn, flag=wx.ALIGN_CENTER_VERTICAL)
-
-		self.soundBoxSizer.Add(volBox, flag=wx.EXPAND | wx.LEFT | wx.BOTTOM, border=20)
-		self.soundControls.extend([self.volLabel, self.soundVolumeSlider, self.volValueText, self.testVolBtn])
-
-		settingsSizer.Add(self.soundBoxSizer, flag=wx.EXPAND | wx.BOTTOM, border=10)
-
-		# Sekcja aktualizacji dodatku (WCAG 2.1 / 2.2 AA)
-		settingsSizer.AddSpacer(10)
-		self.chkAutoUpdates = sHelper.addItem(
-			wx.CheckBox(self, label="&Automatycznie sprawdzaj dostępność aktualizacji przy uruchomieniu NVDA")
-		)
-		self.chkAutoUpdates.SetValue(_to_bool(conf.get("autoCheckUpdates", True), default=True))
-
-		self.txtUpdateSource = sHelper.addLabeledControl(
-			"&Lokalizacja pliku ogłoszeniowego (ścieżka na dysku lub URL):",
-			wx.TextCtrl,
-			value=conf.get("updateSourceUrl", "https://raw.githubusercontent.com/strugo10/outlookSpeechFilter/main/update_info.json")
-		)
-
-		# Sekcja narzędziowa: Pomoc kontekstowa, Samouczek / Pomoc HTML, Kontakt z autorem, Skróty klawiszowe oraz Przywracanie ustawień domyślnych
-		toolsBox = wx.BoxSizer(wx.HORIZONTAL)
-		self.checkUpdatesBtn = wx.Button(self, label="&Sprawdź dostępność aktualizacji teraz")
-		self.checkUpdatesBtn.Bind(wx.EVT_BUTTON, self.onCheckUpdatesNow)
-		toolsBox.Add(self.checkUpdatesBtn, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=8)
-
+		# 6. Przyciski narzędziowe: Pomoc i skróty (zgrupowane razem)
+		toolsBox1 = wx.BoxSizer(wx.HORIZONTAL)
 		self.contextHelpBtn = wx.Button(self, label=_t("CONTEXT_HELP_BTN"))
 		self.contextHelpBtn.Bind(wx.EVT_BUTTON, lambda evt: showContextHelp("settings", parent=self))
-		toolsBox.Add(self.contextHelpBtn, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=8)
+		toolsBox1.Add(self.contextHelpBtn, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=8)
 
 		self.helpBtn = wx.Button(self, label=_t("HELP_BTN"))
 		self.helpBtn.Bind(wx.EVT_BUTTON, self.onOpenHelp)
-		toolsBox.Add(self.helpBtn, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=8)
-
-		self.contactBtn = wx.Button(self, label=_t("CONTACT_BTN"))
-		self.contactBtn.Bind(wx.EVT_BUTTON, self.onContactAuthor)
-		toolsBox.Add(self.contactBtn, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=8)
+		toolsBox1.Add(self.helpBtn, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=8)
 
 		self.gesturesBtn = wx.Button(self, label=_t("GESTURES_BTN"))
 		self.gesturesBtn.Bind(wx.EVT_BUTTON, self.onOpenInputGestures)
-		toolsBox.Add(self.gesturesBtn, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=8)
+		toolsBox1.Add(self.gesturesBtn, flag=wx.ALIGN_CENTER_VERTICAL)
+		sHelper.addItem(toolsBox1)
+
+		# 7. Przyciski społecznościowe i przywracania fabrycznego
+		toolsBox2 = wx.BoxSizer(wx.HORIZONTAL)
+		self.shareBtn = wx.Button(self, label=_t("SHARE_BTN"))
+		self.shareBtn.Bind(wx.EVT_BUTTON, lambda evt: showShareAddonDialog(self))
+		toolsBox2.Add(self.shareBtn, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=8)
+
+		self.contactBtn = wx.Button(self, label=_t("CONTACT_BTN"))
+		self.contactBtn.Bind(wx.EVT_BUTTON, self.onContactAuthor)
+		toolsBox2.Add(self.contactBtn, flag=wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, border=8)
 
 		self.restoreDefaultsBtn = wx.Button(self, label=_t("RESTORE_DEFAULTS_BTN"))
 		self.restoreDefaultsBtn.Bind(wx.EVT_BUTTON, self.onRestoreDefaults)
-		toolsBox.Add(self.restoreDefaultsBtn, flag=wx.ALIGN_CENTER_VERTICAL)
-		sHelper.addItem(toolsBox)
+		toolsBox2.Add(self.restoreDefaultsBtn, flag=wx.ALIGN_CENTER_VERTICAL)
+		sHelper.addItem(toolsBox2)
 
-		# Informacja o wersji, buildzie i autorach
+		# 8. Informacja o wersji i autorach
 		self.infoText = wx.StaticText(
 			self,
 			label=_t(
@@ -3169,15 +3435,6 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 		)
 		sHelper.addItem(self.infoText)
 
-		# Zapamiętanie stanu zaznaczenia dźwięków do ewentualnego przywrócenia
-		self._lastActiveChildStates = [cb.GetValue() for cb in self.childSoundCBs]
-		if not any(self._lastActiveChildStates):
-			self._lastActiveChildStates = [True] * len(self.childSoundCBs)
-
-		# Ustawienie początkowej widoczności i stanów kontrolek sekcji dźwiękowej
-		showSounds = self.useSoundsCB.GetValue()
-		self.showSoundsPanel(showSounds)
-		self.updateSoundControlsState()
 		self.updateParentSoundsLabel()
 		self.Bind(wx.EVT_CHAR_HOOK, self.onCharHook)
 
@@ -3197,11 +3454,6 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 			return
 		event.Skip()
 
-	def _playSingleSoundMaxVol(self, soundName):
-		"""Odtwarza pojedynczy dźwięk w ustawieniach z pełną głośnością 100%."""
-		_stop_pending_sounds()
-		_play_status_sound(soundName, volume=100)
-
 	def setCleanerEnabledState(self, state):
 		if hasattr(self, "enabledCB") and self.enabledCB:
 			self.enabledCB.SetValue(_to_bool(state, default=True))
@@ -3212,60 +3464,71 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 
 	def setUseSoundsState(self, state):
 		if hasattr(self, "useSoundsCB") and self.useSoundsCB:
-			self.useSoundsCB.SetValue(_to_bool(state, default=True))
-			self.onUseSoundsChanged(None)
+			self.useSoundsEnabled = _to_bool(state, default=True)
+			self.updateParentSoundsLabel()
 
-	def showSoundsPanel(self, show):
-		"""Płynnie ukrywa lub pokazuje cały panel dźwiękowy i odświeża układ okna."""
-		sizer = self.GetSizer()
-		if sizer and hasattr(self, "soundBoxSizer") and self.soundBoxSizer:
-			sizer.Show(self.soundBoxSizer, show, recursive=True)
-		if hasattr(self, "soundControls"):
-			for ctrl in self.soundControls:
-				try:
-					ctrl.Show(show)
-				except Exception:
-					pass
-		self.Layout()
-		parent = self.GetParent()
-		if parent:
-			try:
-				parent.Layout()
-			except Exception:
-				pass
+	def onCustomizeSounds(self, evt):
+		dlg = SoundCustomizationDialog(
+			self,
+			self.soundStates,
+			sound_theme=getattr(self, "soundTheme", "associative"),
+			sound_volume=getattr(self, "soundVolume", 80)
+		)
+		gui.mainFrame.prePopup()
+		try:
+			if dlg.ShowModal() == wx.ID_OK:
+				self.soundStates = dlg.getStates()
+				self.soundTheme = dlg.getSoundTheme()
+				self.soundVolume = dlg.getSoundVolume()
+				if any(self.soundStates.values()):
+					self._lastActiveSoundStates = dict(self.soundStates)
+					self.useSoundsEnabled = True
+				else:
+					self.useSoundsEnabled = False
+				self.updateParentSoundsLabel()
+		finally:
+			dlg.Destroy()
+			gui.mainFrame.postPopup()
 
-	def updateSoundControlsState(self):
-		"""Aktualizuje dostępność przycisków zbiorczych Zaznacz / Odznacz wszystkie dźwięki."""
-		total = len(self.childSoundCBs)
-		selected = sum(1 for cb in self.childSoundCBs if cb.GetValue())
-		if hasattr(self, "selectAllBtn") and self.selectAllBtn:
-			self.selectAllBtn.Enable(selected < total)
-		if hasattr(self, "deselectAllBtn") and self.deselectAllBtn:
-			self.deselectAllBtn.Enable(selected > 0)
+	def onUseSoundsChanged(self, evt):
+		if not getattr(self, "useSoundsEnabled", True):
+			self.useSoundsEnabled = True
+			if not any(self.soundStates.values()):
+				if hasattr(self, "_lastActiveSoundStates") and any(self._lastActiveSoundStates.values()):
+					self.soundStates = dict(self._lastActiveSoundStates)
+				else:
+					for k in self.soundStates:
+						self.soundStates[k] = (k in ("soundUnread", "soundAttachments", "soundInlineImages", "soundImportanceHigh", "soundMeetingRequest"))
+			self.updateParentSoundsLabel()
+		else:
+			self.useSoundsEnabled = False
+			self.updateParentSoundsLabel()
 
 	def updateParentSoundsLabel(self):
-		total = len(self.childSoundCBs)
-		selected = sum(1 for cb in self.childSoundCBs if cb.GetValue())
+		total = len(self.soundStates)
+		selected = sum(1 for val in self.soundStates.values() if val)
 		baseLabel = _t("PARENT_SOUNDS_LABEL")
-		if not self.useSoundsCB.GetValue():
-			self.useSoundsCB.SetLabel(baseLabel)
-		elif selected == total:
-			self.useSoundsCB.SetLabel(baseLabel)
-		elif selected == 0:
-			self.useSoundsCB.SetLabel(baseLabel + _t("PARENT_ALL_DISABLED"))
-		else:
-			self.useSoundsCB.SetLabel(baseLabel + _t("PARENT_PARTIAL"))
 
-	def onSoundThemeChanged(self, evt):
-		idx = self.soundThemeChoice.GetSelection()
-		if 0 <= idx < len(self.themeKeys):
-			chosenTheme = self.themeKeys[idx]
-			try:
-				config.conf[CONFIG_SECTION]["soundTheme"] = chosenTheme
-			except Exception:
-				pass
-			_stop_pending_sounds()
-			_play_status_sound("attachment", volume=100)
+		if not getattr(self, "useSoundsEnabled", True):
+			self.useSoundsCB.Set3StateValue(wx.CHK_UNCHECKED)
+			self.useSoundsCB.SetLabel(baseLabel)
+			if hasattr(self, "btnCustomizeSounds"):
+				self.btnCustomizeSounds.Enable(False)
+		elif selected == total:
+			self.useSoundsCB.Set3StateValue(wx.CHK_CHECKED)
+			self.useSoundsCB.SetLabel(baseLabel)
+			if hasattr(self, "btnCustomizeSounds"):
+				self.btnCustomizeSounds.Enable(True)
+		elif selected == 0:
+			self.useSoundsCB.Set3StateValue(wx.CHK_UNCHECKED)
+			self.useSoundsCB.SetLabel(baseLabel + _t("PARENT_ALL_DISABLED"))
+			if hasattr(self, "btnCustomizeSounds"):
+				self.btnCustomizeSounds.Enable(False)
+		else:
+			self.useSoundsCB.Set3StateValue(wx.CHK_UNDETERMINED)
+			self.useSoundsCB.SetLabel(baseLabel + _t("PARENT_PARTIAL"))
+			if hasattr(self, "btnCustomizeSounds"):
+				self.btnCustomizeSounds.Enable(True)
 
 	def updateUILabels(self):
 		"""Aktualizuje etykiety wszystkich kontrolek w otwartym panelu na bieżąco po zmianie języka."""
@@ -3281,49 +3544,17 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 			self.enabledCB.SetLabel(_t("ENABLE_FILTER"))
 		if hasattr(self, "threadNavCB") and self.threadNavCB:
 			self.threadNavCB.SetLabel(_t("ENABLE_THREAD_NAV"))
-		if hasattr(self, "themeLabel") and self.themeLabel:
-			self.themeLabel.SetLabel(_t("SOUND_THEME_LABEL"))
-		if hasattr(self, "soundThemeChoice") and self.soundThemeChoice:
-			self.soundThemeChoice.SetName(_t("SOUND_THEME_LABEL"))
-			themeLabels = [
-				_t("THEME_ASSOCIATIVE"),
-				_t("THEME_MINIMAL"),
-				_t("THEME_INSTRUMENTAL"),
-			]
-			currSel = self.soundThemeChoice.GetSelection()
-			for idx, lbl in enumerate(themeLabels):
-				try:
-					self.soundThemeChoice.SetString(idx, lbl)
-				except Exception:
-					pass
-			self.soundThemeChoice.SetSelection(currSel)
-		if hasattr(self, "soundExplText") and self.soundExplText:
-			self.soundExplText.SetLabel(_t("SOUND_EXPL_TEXT"))
-		if hasattr(self, "selectAllBtn") and self.selectAllBtn:
-			self.selectAllBtn.SetLabel(_t("SELECT_ALL_SOUNDS"))
-		if hasattr(self, "deselectAllBtn") and self.deselectAllBtn:
-			self.deselectAllBtn.SetLabel(_t("DESELECT_ALL_SOUNDS"))
-
-		if hasattr(self, "soundChildItems"):
-			for cb, cbKey, btn, bKey in self.soundChildItems:
-				if cb:
-					cb.SetLabel(_t(cbKey))
-				if btn:
-					btn.SetLabel(_t(bKey))
+		if hasattr(self, "btnCustomizeSounds") and self.btnCustomizeSounds:
+			self.btnCustomizeSounds.SetLabel(_t("CUSTOMIZE_SOUNDS_BTN"))
 
 		self.updateParentSoundsLabel()
-
-		if hasattr(self, "volLabel") and self.volLabel:
-			self.volLabel.SetLabel(_t("VOL_LABEL"))
-		if hasattr(self, "soundVolumeSlider") and self.soundVolumeSlider:
-			self.soundVolumeSlider.SetName(_t("SLIDER_NAME"))
-		if hasattr(self, "testVolBtn") and self.testVolBtn:
-			self.testVolBtn.SetLabel(_t("TEST_VOL_BTN"))
 
 		if hasattr(self, "contextHelpBtn") and self.contextHelpBtn:
 			self.contextHelpBtn.SetLabel(_t("CONTEXT_HELP_BTN"))
 		if hasattr(self, "helpBtn") and self.helpBtn:
 			self.helpBtn.SetLabel(_t("HELP_BTN"))
+		if hasattr(self, "shareBtn") and self.shareBtn:
+			self.shareBtn.SetLabel(_t("SHARE_BTN"))
 		if hasattr(self, "contactBtn") and self.contactBtn:
 			self.contactBtn.SetLabel(_t("CONTACT_BTN"))
 		if hasattr(self, "gesturesBtn") and self.gesturesBtn:
@@ -3391,159 +3622,19 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 	def _openContactDialog(self, *args, **kwargs):
 		self.onContactAuthor(None)
 
-	def onChildSoundChanged(self, evt):
-		selected = sum(1 for cb in self.childSoundCBs if cb.GetValue())
-		if selected == 0:
-			# Gdy wszystkie dźwięki zostaną odznaczone, automatycznie wyłącz całą opcję i zwiń panel
-			self.useSoundsCB.SetValue(False)
-			self.showSoundsPanel(False)
-			self.updateSoundControlsState()
-			self.updateParentSoundsLabel()
-			wx.CallAfter(self.useSoundsCB.SetFocus)
-			ui.message(_t("SOUNDS_ALL_DESELECTED"))
-		else:
-			self._lastActiveChildStates = [cb.GetValue() for cb in self.childSoundCBs]
-			self.updateSoundControlsState()
-			self.updateParentSoundsLabel()
-			self.Layout()
-
-	def onSelectAllSounds(self, evt):
-		for cb in self.childSoundCBs:
-			cb.SetValue(True)
-		self._lastActiveChildStates = [True] * len(self.childSoundCBs)
-		self.updateSoundControlsState()
-		self.updateParentSoundsLabel()
-		self.Layout()
-		if hasattr(self, "deselectAllBtn") and self.deselectAllBtn and self.deselectAllBtn.IsEnabled():
-			wx.CallAfter(self.deselectAllBtn.SetFocus)
-		ui.message(_t("SOUNDS_ALL_SELECTED"))
-
-	def onDeselectAllSounds(self, evt):
-		# Zapisz stan przed odznaczeniem wszystkich
-		currentStates = [cb.GetValue() for cb in self.childSoundCBs]
-		if any(currentStates):
-			self._lastActiveChildStates = currentStates
-		for cb in self.childSoundCBs:
-			cb.SetValue(False)
-		# Gdy wszystkie dźwięki są odznaczane, następuje wyłączenie całej opcji i zwinięcie panelu
-		self.useSoundsCB.SetValue(False)
-		self.showSoundsPanel(False)
-		self.updateSoundControlsState()
-		self.updateParentSoundsLabel()
-		wx.CallAfter(self.useSoundsCB.SetFocus)
-		ui.message(_t("SOUNDS_ALL_DESELECTED"))
-
-	def _updateSliderValue(self, newVal):
-		"""Aktualizuje suwak, etykietę tekstową oraz natychmiast konfigurację z powiadomieniem dla NVDA."""
-		newVal = max(0, min(100, newVal))
-		self.soundVolumeSlider.SetValue(newVal)
-		self.volValueText.SetLabel(f"{newVal}%")
-		try:
-			config.conf[CONFIG_SECTION]["soundVolume"] = int(newVal)
-		except Exception:
-			pass
-		try:
-			ctypes.windll.user32.NotifyWinEvent(
-				0x800E,  # EVENT_OBJECT_VALUECHANGE
-				self.soundVolumeSlider.GetHandle(),
-				-4,      # OBJID_CLIENT
-				0,       # CHILDID_SELF
-			)
-		except Exception:
-			pass
-
-	def onSliderKeyDown(self, evt):
-		keyCode = evt.GetKeyCode()
-		currentVal = self.soundVolumeSlider.GetValue()
-
-		# Page Up = głośniej (+10%)
-		if keyCode in (wx.WXK_PAGEUP, getattr(wx, "WXK_NUMPAD_PAGEUP", -1)):
-			self._updateSliderValue(currentVal + 10)
-			return
-
-		# Page Down = ciszej (-10%)
-		elif keyCode in (wx.WXK_PAGEDOWN, getattr(wx, "WXK_NUMPAD_PAGEDOWN", -1)):
-			self._updateSliderValue(currentVal - 10)
-			return
-
-		# Strzałka w górę lub w prawo = głośniej (+1%)
-		elif keyCode in (
-			wx.WXK_UP,
-			wx.WXK_RIGHT,
-			getattr(wx, "WXK_NUMPAD_UP", -1),
-			getattr(wx, "WXK_NUMPAD_RIGHT", -1),
-		):
-			self._updateSliderValue(currentVal + 1)
-			return
-
-		# Strzałka w dół lub w lewo = ciszej (-1%)
-		elif keyCode in (
-			wx.WXK_DOWN,
-			wx.WXK_LEFT,
-			getattr(wx, "WXK_NUMPAD_DOWN", -1),
-			getattr(wx, "WXK_NUMPAD_LEFT", -1),
-		):
-			self._updateSliderValue(currentVal - 1)
-			return
-
-		# Home = maksymalna głośność (100%)
-		elif keyCode in (wx.WXK_HOME, getattr(wx, "WXK_NUMPAD_HOME", -1)):
-			self._updateSliderValue(100)
-			return
-
-		# End = wyciszenie (0%)
-		elif keyCode in (wx.WXK_END, getattr(wx, "WXK_NUMPAD_END", -1)):
-			self._updateSliderValue(0)
-			return
-
-		evt.Skip()
-
-	def onSoundVolumeChanged(self, evt):
-		val = self.soundVolumeSlider.GetValue()
-		self.volValueText.SetLabel(f"{val}%")
-		# Natychmiastowa aktualizacja konfiguracji bez konieczności klikania OK
-		try:
-			config.conf[CONFIG_SECTION]["soundVolume"] = int(val)
-		except Exception:
-			pass
-
-	def onTestSoundVolume(self, evt):
-		_stop_pending_sounds()
-		val = self.soundVolumeSlider.GetValue()
-		if val <= 0:
-			ui.message(_t("SOUNDS_VOL_MUTED"))
-		else:
-			# Odtwarza sekwencyjnie wszystkie dźwięki przy wybranej głośności suwaka
-			_schedule_status_sounds_sequence(TEST_SOUNDS_SEQUENCE, volume=val, delay_ms=230)
-
-	def onUseSoundsChanged(self, evt):
-		show = self.useSoundsCB.GetValue()
-		if show:
-			# Jeśli wszystkie dźwięki były odznaczone, przywróć stan sprzed wyłączenia
-			if not any(cb.GetValue() for cb in self.childSoundCBs):
-				if hasattr(self, "_lastActiveChildStates") and any(self._lastActiveChildStates):
-					for cb, st in zip(self.childSoundCBs, self._lastActiveChildStates):
-						cb.SetValue(_to_bool(st, default=True))
-				else:
-					for cb in self.childSoundCBs:
-						cb.SetValue(True)
-				ui.message(_t("SOUNDS_STATE_RESTORED"))
-		else:
-			currentStates = [cb.GetValue() for cb in self.childSoundCBs]
-			if any(currentStates):
-				self._lastActiveChildStates = currentStates
-
-		self.showSoundsPanel(show)
-		self.updateSoundControlsState()
-		self.updateParentSoundsLabel()
-
 	def onOpenHelp(self, evt):
 		docFile = get_doc_path()
 		if docFile and os.path.isfile(docFile):
 			try:
-				os.startfile(docFile)
-			except Exception as e:
-				log.debugWarning(f"Nie udało się otworzyć pomocy: {e}")
+				import urllib.parse
+				url = f"file:///{urllib.parse.quote(docFile.replace(os.sep, '/'))}"
+				import webbrowser
+				webbrowser.open(url)
+			except Exception:
+				try:
+					os.startfile(docFile)
+				except Exception as e:
+					log.debugWarning(f"Nie udało się otworzyć pomocy: {e}")
 		else:
 			ui.message(_t("HELP_NOT_FOUND"))
 
@@ -3570,11 +3661,13 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 		except Exception:
 			pass
 
-		# 0b. Motyw dźwięków
-		if hasattr(self, "soundThemeChoice"):
-			self.soundThemeChoice.SetSelection(0)
+		# 0b. Motyw dźwięków i głośność
+		self.soundTheme = "associative"
+		self.soundVolume = 80
 		try:
 			config.conf[CONFIG_SECTION]["soundTheme"] = "associative"
+			config.conf[CONFIG_SECTION]["soundVolume"] = 80
+			config.conf[CONFIG_SECTION]["updateSourceUrl"] = DEFAULT_UPDATE_SOURCE_URL
 		except Exception:
 			pass
 
@@ -3582,36 +3675,24 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 		self.enabledCB.SetValue(True)
 		if hasattr(self, "threadNavCB") and self.threadNavCB:
 			self.threadNavCB.SetValue(True)
-		self.useSoundsCB.SetValue(True)
 
-		# 2. Suwak głośności i etykieta
-		self.soundVolumeSlider.SetValue(80)
-		self.volValueText.SetLabel("80%")
-		try:
-			config.conf[CONFIG_SECTION]["soundVolume"] = 80
-		except Exception:
-			pass
+		# 2. Poszczególne dźwięki według oficjalnych ustawień domyślnych
+		self.soundStates = {
+			"soundUnread": True,
+			"soundFlags": False,
+			"soundAttachments": True,
+			"soundInlineImages": True,
+			"soundReplied": False,
+			"soundForwarded": False,
+			"soundImportanceHigh": True,
+			"soundImportanceLow": False,
+			"soundMeetingRequest": True,
+			"soundCategories": False,
+			"soundExternal": False,
+		}
+		self._lastActiveSoundStates = dict(self.soundStates)
+		self.useSoundsEnabled = True
 
-		# 3. Poszczególne dźwięki według oficjalnych ustawień domyślnych
-		self.soundUnreadCB.SetValue(True)
-		self.soundFlagsCB.SetValue(False)
-		self.soundAttachmentsCB.SetValue(True)
-		if hasattr(self, "soundInlineImagesCB") and self.soundInlineImagesCB:
-			self.soundInlineImagesCB.SetValue(True)
-		self.soundRepliedCB.SetValue(False)
-		self.soundForwardedCB.SetValue(False)
-		self.soundImportanceHighCB.SetValue(True)
-		self.soundImportanceLowCB.SetValue(False)
-		self.soundMeetingRequestCB.SetValue(True)
-		self.soundCategoriesCB.SetValue(False)
-		self.soundExternalCB.SetValue(False)
-
-		# 4. Zapamiętany stan do ewentualnego przywrócenia
-		self._lastActiveChildStates = [cb.GetValue() for cb in self.childSoundCBs]
-
-		# 5. Aktualizacja widoczności, stanów przycisków zbiorczych i etykiety
-		self.showSoundsPanel(True)
-		self.updateSoundControlsState()
 		self.updateParentSoundsLabel()
 		self.updateUILabels()
 		self.Layout()
@@ -3645,64 +3726,37 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 					chosenLang = self.langKeys[idx]
 					conf["language"] = chosenLang
 					self.initialLanguage = chosenLang
-			if hasattr(self, "soundThemeChoice") and hasattr(self, "themeKeys"):
-				idx = self.soundThemeChoice.GetSelection()
-				if 0 <= idx < len(self.themeKeys):
-					chosenTheme = self.themeKeys[idx]
-					conf["soundTheme"] = chosenTheme
-					self.initialSoundTheme = chosenTheme
+			if hasattr(self, "soundTheme"):
+				conf["soundTheme"] = self.soundTheme
+				self.initialSoundTheme = self.soundTheme
 			if hasattr(self, "enabledCB") and self.enabledCB:
 				conf["enabled"] = bool(self.enabledCB.GetValue())
 			if hasattr(self, "threadNavCB") and self.threadNavCB:
 				conf["threadNavigationEnabled"] = bool(self.threadNavCB.GetValue())
 			if hasattr(self, "useSoundsCB") and self.useSoundsCB:
-				conf["useSounds"] = bool(self.useSoundsCB.GetValue())
-			if hasattr(self, "soundVolumeSlider") and self.soundVolumeSlider:
-				val = int(self.soundVolumeSlider.GetValue())
-				conf["soundVolume"] = val
-				self.initialSoundVolume = val
-			if hasattr(self, "soundUnreadCB") and self.soundUnreadCB:
-				conf["soundUnread"] = bool(self.soundUnreadCB.GetValue())
-			if hasattr(self, "soundFlagsCB") and self.soundFlagsCB:
-				conf["soundFlags"] = bool(self.soundFlagsCB.GetValue())
-			if hasattr(self, "soundAttachmentsCB") and self.soundAttachmentsCB:
-				conf["soundAttachments"] = bool(self.soundAttachmentsCB.GetValue())
-			if hasattr(self, "soundInlineImagesCB") and self.soundInlineImagesCB:
-				conf["soundInlineImages"] = bool(self.soundInlineImagesCB.GetValue())
-			if hasattr(self, "soundRepliedCB") and self.soundRepliedCB:
-				conf["soundReplied"] = bool(self.soundRepliedCB.GetValue())
-			if hasattr(self, "soundForwardedCB") and self.soundForwardedCB:
-				conf["soundForwarded"] = bool(self.soundForwardedCB.GetValue())
-			if hasattr(self, "soundImportanceHighCB") and self.soundImportanceHighCB:
-				conf["soundImportanceHigh"] = bool(self.soundImportanceHighCB.GetValue())
-			if hasattr(self, "soundImportanceLowCB") and self.soundImportanceLowCB:
-				conf["soundImportanceLow"] = bool(self.soundImportanceLowCB.GetValue())
-			if hasattr(self, "soundMeetingRequestCB") and self.soundMeetingRequestCB:
-				conf["soundMeetingRequest"] = bool(self.soundMeetingRequestCB.GetValue())
-			if hasattr(self, "soundCategoriesCB") and self.soundCategoriesCB:
-				conf["soundCategories"] = bool(self.soundCategoriesCB.GetValue())
-			if hasattr(self, "soundExternalCB") and self.soundExternalCB:
-				conf["soundExternal"] = bool(self.soundExternalCB.GetValue())
+				conf["useSounds"] = bool(getattr(self, "useSoundsEnabled", True) and any(self.soundStates.values()))
+			if hasattr(self, "soundVolume"):
+				conf["soundVolume"] = int(self.soundVolume)
+				self.initialSoundVolume = int(self.soundVolume)
+
+			for confKey, val in self.soundStates.items():
+				conf[confKey] = bool(val)
+				conf["report" + confKey[5:]] = bool(val)
+
 			if hasattr(self, "chkAutoUpdates") and self.chkAutoUpdates:
 				conf["autoCheckUpdates"] = bool(self.chkAutoUpdates.GetValue())
-			if hasattr(self, "txtUpdateSource") and self.txtUpdateSource:
-				conf["updateSourceUrl"] = self.txtUpdateSource.GetValue().strip()
+
+			# Zapewnij zawsze poprawny produkcyjny adres GitHub (oczyszczanie ewentualnych ścieżek lokalnych)
+			curUpd = str(conf.get("updateSourceUrl", "")).strip()
+			if not curUpd or "mój dysk" in curUpd.lower() or "moj dysk" in curUpd.lower() or curUpd.endswith("updates.json"):
+				conf["updateSourceUrl"] = DEFAULT_UPDATE_SOURCE_URL
+
 			# Synchronize legacy keys
-			conf["soundForwardReply"] = bool(conf.get("soundReplied", False) or conf.get("soundForwarded", False))
-			conf["soundImportance"] = bool(conf.get("soundImportanceHigh", True) or conf.get("soundImportanceLow", False))
-			conf["reportUnread"] = bool(conf.get("soundUnread", True))
-			conf["reportFlags"] = bool(conf.get("soundFlags", False))
-			conf["reportAttachments"] = bool(conf.get("soundAttachments", True))
-			conf["reportInlineImages"] = bool(conf.get("soundInlineImages", True))
-			conf["reportReplied"] = bool(conf.get("soundReplied", False))
-			conf["reportForwarded"] = bool(conf.get("soundForwarded", False))
-			conf["reportImportanceHigh"] = bool(conf.get("soundImportanceHigh", True))
-			conf["reportImportanceLow"] = bool(conf.get("soundImportanceLow", False))
-			conf["reportForwardReply"] = bool(conf.get("soundForwardReply", False))
-			conf["reportImportance"] = bool(conf.get("soundImportance", True))
-			conf["reportMeetingRequest"] = bool(conf.get("soundMeetingRequest", True))
-			conf["reportCategories"] = bool(conf.get("soundCategories", False))
-			conf["reportExternal"] = bool(conf.get("soundExternal", False))
+			conf["soundForwardReply"] = bool(self.soundStates.get("soundReplied", False) or self.soundStates.get("soundForwarded", False))
+			conf["soundImportance"] = bool(self.soundStates.get("soundImportanceHigh", True) or self.soundStates.get("soundImportanceLow", False))
+			conf["reportForwardReply"] = bool(conf["soundForwardReply"])
+			conf["reportImportance"] = bool(conf["soundImportance"])
+
 			self.updateUILabels()
 			try:
 				config.conf.save()
@@ -4673,6 +4727,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 					targetSec[k] = _to_int(rawVal, default=80, min_val=0, max_val=100)
 				elif specStr.startswith("string"):
 					targetSec[k] = str(rawVal)
+
+		# Sanitizacja adresu URL aktualizacji - usunięcie lokalnych ścieżek z fazy testowej
+		curUpd = str(targetSec.get("updateSourceUrl", "")).strip()
+		if not curUpd or "mój dysk" in curUpd.lower() or "moj dysk" in curUpd.lower() or curUpd.endswith("updates.json"):
+			targetSec["updateSourceUrl"] = DEFAULT_UPDATE_SOURCE_URL
 
 		# Walidacja i zapis poprawionej konfiguracji
 		try:

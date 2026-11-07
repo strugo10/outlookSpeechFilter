@@ -1,7 +1,7 @@
 {
   "name": "outlookSpeechFilter",
-  "version": "1.18.2",
+  "version": "1.20.1",
   "downloadUrl": "https://github.com/strugo10/outlookSpeechFilter/releases/latest/download/outlookSpeechFilter.nvda-addon",
-  "changelog": "Wersja 1.18.2:\n• Ochrona tematów maili: słowo 'załącznik' w temacie wiadomości nie jest już obcinane przez syntezator.\n• Precyzyjne wykrywanie stanu: pełne rozdzielenie filtrów wiadomości przeczytanych i nieprzeczytanych.\n• Prawidłowe rozróżnianie plików załączników (.pdf, .msg) od drobnych grafik w treści wiadomości.\n• Wyeliminowanie przejmowania skrótów poza oknem Microsoft Outlook.\n• Precyzyjne dopasowanie dat w oknie podglądu wątku bez przesunięć kursora.\n• Pełna zgodność z NVDA 2024.1+ (minimumNVDAVersion).",
+  "changelog": "Wersja 1.20.1:\n• Poprawiono błąd składni w obsłudze zapisu konfiguracji onSave, przywracając pełną widoczność i ładowanie modułu w NVDA.\n• Wdrożono automatyczną weryfikację poprawności składniowej przed każdą publikacją i wdrożeniem dodatków.",
   "minNVDAVersion": "2024.1.0"
 }
