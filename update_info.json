@@ -1,7 +1,7 @@
 {
   "name": "outlookSpeechFilter",
-  "version": "1.20.1",
+  "version": "1.20.3",
   "downloadUrl": "https://github.com/strugo10/outlookSpeechFilter/releases/latest/download/outlookSpeechFilter.nvda-addon",
-  "changelog": "Wersja 1.20.1:\n• Poprawiono błąd składni w obsłudze zapisu konfiguracji onSave, przywracając pełną widoczność i ładowanie modułu w NVDA.\n• Wdrożono automatyczną weryfikację poprawności składniowej przed każdą publikacją i wdrożeniem dodatków.",
+  "changelog": "Wersja 1.20.3:\n• Koordynacja dźwięków obecności grafik na liście wiadomości z dodatkiem Outlook Image Helper — eliminacja podwójnego odtwarzania sygnału grafiki.\n• Pełny kontrakt instalatora aktualizacji NVDA (weryfikacja pakietu AddonBundle i oznaczanie poprzedniej wersji prevAddon.requestRemove()).\n• Poprawka brakującego importu modułu tones w oknie udostępniania dodatku.",
   "minNVDAVersion": "2024.1.0"
 }

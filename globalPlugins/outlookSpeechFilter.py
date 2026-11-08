@@ -23,7 +23,6 @@ import wave
 import weakref
 from comtypes import COMError
 import comtypes.automation
-from comtypes.hresult import S_OK
 
 import addonHandler
 import api
@@ -33,6 +32,7 @@ try:
 except (ImportError, AttributeError):
 	ReportTableHeaders = None
 import controlTypes
+import core
 import globalPluginHandler
 import globalVars
 import gui
@@ -40,9 +40,9 @@ import gui.guiHelper
 import gui.settingsDialogs
 from gui.settingsDialogs import SettingsPanel
 from logHandler import log
-import NVDAHelper
 import nvwave
 from scriptHandler import script
+import tones
 import ui
 import UIAHandler
 import winsound
@@ -58,9 +58,9 @@ addonHandler.initTranslation()
 CONFIG_SECTION = "outlookSpeechFilter"
 OLD_CONFIG_SECTION = "outlookMessageCleaner"
 ADDON_NAME = "Outlook Speech Filter"
-ADDON_VERSION = "1.20.1"
-ADDON_BUILD = "20261107.2"
-ADDON_BUILD_DATE = "2026-11-07"
+ADDON_VERSION = "1.20.3"
+ADDON_BUILD = "20261108.2"
+ADDON_BUILD_DATE = "2026-11-08"
 ADDON_AUTHOR = "Sławomir Strugarek (z pomocą Antigravity)"
 ADDON_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOUNDS_DIR = os.path.join(ADDON_DIR, "sounds")
@@ -2424,7 +2424,7 @@ def _custom_UIAGridRow_get_name_impl(self):
 				sounds_to_play.append("attachment")
 		elif status_key == "inline_image" and inlineImgCount > 0:
 			rowStatuses.append(_format_inline_images_status(inlineImgCount))
-			if useSounds and soundInlineImages:
+			if useSounds and soundInlineImages and not _is_image_helper_handling_inline_sounds():
 				sounds_to_play.append("inline_image")
 		elif status_key == "replied" and verbText and verbSound == "replied":
 			rowStatuses.append(verbText)
@@ -2474,6 +2474,29 @@ def _custom_UIAGridRow_get_name_impl(self):
 	return " ".join(textList)
 
 
+def _is_image_helper_handling_inline_sounds() -> bool:
+	"""
+	Sprawdza, czy dodatek Outlook Image Helper jest aktywny i obsługuje
+	dźwięki obecności grafik w treści na liście wiadomości.
+	Zapobiega podwójnemu odtwarzaniu dźwięku grafiki przez oba dodatki jednocześnie.
+	"""
+	try:
+		oih_running = False
+		for p in getattr(globalPluginHandler, "runningPlugins", []):
+			mod_name = getattr(p, "__module__", "") or getattr(getattr(p, "__class__", None), "__module__", "")
+			if "outlookImageHelper" in mod_name:
+				oih_running = True
+				break
+		if not oih_running:
+			return False
+		oih_conf = config.conf.get("outlookImageHelper", {})
+		if not oih_conf:
+			return True
+		return _to_bool(oih_conf.get("playSound", True), default=True)
+	except Exception:
+		return False
+
+
 def _custom_getReceivedMessageString(obj):
 	conf = config.conf.get(CONFIG_SECTION, {})
 	enabled = _to_bool(conf.get("enabled", True), default=True)
@@ -2514,7 +2537,7 @@ def _custom_getReceivedMessageString(obj):
 	if inlineImgCount > 0:
 		if speakStatuses:
 			nameList.append(_format_inline_images_status(inlineImgCount))
-		if useSounds and soundInlineImages:
+		if useSounds and soundInlineImages and not _is_image_helper_handling_inline_sounds():
 			sounds_to_play.append("inline_image")
 
 	sender = ""
@@ -2829,8 +2852,9 @@ class AddonUpdaterEngine:
 	def _worker_download_install(self, download_url: str):
 		import addonHandler
 
-		ui.message(f"Pobieranie aktualizacji dla {self.addon_title} z serwisu GitHub...")
+		wx.CallAfter(ui.message, f"Pobieranie aktualizacji dla {self.addon_title} z serwisu GitHub...")
 		target_pkg = None
+		is_temp_pkg = False
 
 		try:
 			if download_url.startswith("http://") or download_url.startswith("https://"):
@@ -2839,6 +2863,7 @@ class AddonUpdaterEngine:
 				with urllib.request.urlopen(req, timeout=30) as resp, open(tmp_file, "wb") as out:
 					shutil.copyfileobj(resp, out)
 				target_pkg = tmp_file
+				is_temp_pkg = True
 			else:
 				if os.path.isfile(download_url):
 					target_pkg = download_url
@@ -2846,30 +2871,107 @@ class AddonUpdaterEngine:
 			if not target_pkg or not os.path.isfile(target_pkg):
 				raise FileNotFoundError(f"Nie znaleziono pliku instalacyjnego dodatku:\n{download_url}")
 
+			bundle = addonHandler.AddonBundle(target_pkg)
+			manifest_name = str(bundle.manifest.get("name") or "").strip()
+			manifest_ver = str(bundle.manifest.get("version") or "").strip()
+			if not manifest_name or not manifest_ver:
+				raise ValueError("Pobrany pakiet nie zawiera prawidłowego pliku manifest.ini.")
+			if manifest_name != self.addon_name:
+				raise ValueError(f"Niezgodna nazwa dodatku w pakiecie: oczekiwano '{self.addon_name}', otrzymano '{manifest_name}'.")
+
 			def _do_install():
+				installed_ok = False
+				install_err_msg = ""
 				try:
-					if hasattr(addonHandler, "installAddonPackage"):
+					try:
+						import addonHandler.addonVersionCheck as avc
+						if hasattr(avc, "isAddonCompatible") and not avc.isAddonCompatible(bundle):
+							if getattr(bundle, "canOverrideCompatibility", False):
+								bundle.enableCompatibilityOverride()
+							else:
+								raise RuntimeError("Pobrana wersja dodatku nie jest kompatybilna z bieżącą wersją NVDA.")
+					except ImportError:
+						pass
+
+					prevAddon = None
+					try:
+						from addonStore.install import _getPreviouslyInstalledAddonById
+						prevAddon = _getPreviouslyInstalledAddonById(bundle)
+					except Exception:
 						try:
-							bundle = addonHandler.AddonBundle(target_pkg)
-							addonHandler.installAddonPackage(bundle)
-							return
-						except TypeError:
-							addonHandler.installAddonPackage(target_pkg)
-							return
+							for a in addonHandler.getAvailableAddons():
+								if getattr(a, "name", None) == manifest_name:
+									prevAddon = a
+									break
+						except Exception:
+							prevAddon = None
+
+					addonObj = None
+					if hasattr(addonHandler, "installAddonBundle"):
+						addonObj = addonHandler.installAddonBundle(bundle)
+					elif hasattr(addonHandler, "installAddonPackage"):
+						addonObj = addonHandler.installAddonPackage(bundle)
 					elif hasattr(addonHandler, "installAddon"):
-						bundle = addonHandler.AddonBundle(target_pkg)
-						addonHandler.installAddon(bundle)
-						return
+						addonObj = addonHandler.installAddon(bundle)
+
+					install_exceptions = getattr(bundle, "_installExceptions", None)
+					if addonObj is not None and not install_exceptions:
+						if prevAddon is not None:
+							try:
+								from addonStore.dataManager import addonDataManager
+								if addonDataManager:
+									addonDataManager._deleteCacheInstalledAddon(prevAddon.name)
+							except Exception:
+								pass
+							try:
+								prevAddon.requestRemove()
+							except Exception as remEx:
+								log.warning(f"{self.addon_name} updater prevAddon.requestRemove warning: {remEx}")
+						if hasattr(addonObj, "_cleanupAddonImports"):
+							try:
+								addonObj._cleanupAddonImports()
+							except Exception:
+								pass
+						installed_ok = True
+					else:
+						if install_exceptions:
+							install_err_msg = "; ".join(str(e) for e in install_exceptions)
+						else:
+							install_err_msg = "Funkcja installAddonBundle zwróciła wartość None."
 				except Exception as ex:
-					log.debug(f"{self.addon_name} updater internal install error: {ex}")
-				try:
-					os.startfile(target_pkg)
-				except Exception as ex2:
-					gui.messageBox(f"Nie udało się uruchomić instalatora:\n{ex2}", "Błąd instalacji", wx.OK | wx.ICON_ERROR)
+					install_err_msg = str(ex)
+					log.error(f"{self.addon_name} updater internal install error: {ex}", exc_info=True)
+				finally:
+					if is_temp_pkg and target_pkg and os.path.isfile(target_pkg):
+						try:
+							os.remove(target_pkg)
+						except Exception:
+							pass
+
+				if installed_ok:
+					ver_text = f" do wersji {manifest_ver}" if manifest_ver else ""
+					if gui.messageBox(
+						f"Pomyślnie zaktualizowano dodatek {self.addon_title}{ver_text}.\n\nCzy chcesz teraz zrestartować NVDA, aby zastosować zmiany?",
+						"Aktualizacja zakończona sukcesem",
+						wx.YES_NO | wx.ICON_QUESTION
+					) == wx.YES:
+						core.restart()
+					return
+
+				gui.messageBox(
+					f"Nie udało się zainstalować aktualizacji dodatku {self.addon_title}.\n\nSzczegóły błędu:\n{install_err_msg or 'Nieznany błąd instalacji pakietu.'}",
+					f"Błąd instalacji: {self.addon_title}",
+					wx.OK | wx.ICON_ERROR
+				)
 
 			wx.CallAfter(_do_install)
 		except Exception as ex:
-			wx.CallAfter(gui.messageBox, f"Nie udało się pobrać aktualizacji:\n{ex}", f"Błąd aktualizacji: {self.addon_title}", wx.OK | wx.ICON_ERROR)
+			if is_temp_pkg and target_pkg and os.path.isfile(target_pkg):
+				try:
+					os.remove(target_pkg)
+				except Exception:
+					pass
+			wx.CallAfter(gui.messageBox, f"Nie udało się pobrać lub zweryfikować aktualizacji:\n{ex}", f"Błąd aktualizacji: {self.addon_title}", wx.OK | wx.ICON_ERROR)
 
 
 class ShareAddonDialog(wx.Dialog):
