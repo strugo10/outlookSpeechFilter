@@ -77,47 +77,34 @@ def onInstall():
 	except Exception as e:
 		log.warning(f"outlookSpeechFilter installTasks: Błąd podczas migracji konfiguracji: {e}")
 
-	# 4. Sprawdzenie i inicjalizacja języka dodatku zgodnie z językiem systemu / NVDA
+	# 3. Język dodatku: NIE nadpisujemy ustawienia „auto” — wartość „auto” oznacza dynamiczne
+	# dopasowanie do języka NVDA (languageHandler.getLanguage()) przy każdym uruchomieniu.
+	# Naprawiamy jedynie wartości zapisane jako tekst (np. "True"/"80"), zapisując tylko przy zmianie.
 	try:
 		import config
-		if "outlookSpeechFilter" not in config.conf:
-			config.conf["outlookSpeechFilter"] = {}
-		sec = config.conf["outlookSpeechFilter"]
-		if "language" not in sec or sec.get("language") in (None, "", "auto"):
-			import languageHandler
-			import locale
-			sysLang = "en"
-			try:
-				nl = languageHandler.getLanguage() or ""
-				if nl.lower().startswith("pl"):
-					sysLang = "pl"
-			except Exception:
-				pass
-			if sysLang != "pl":
+		if "outlookSpeechFilter" in config.conf:
+			sec = config.conf["outlookSpeechFilter"]
+			changed = False
+			for k, v in list(sec.items()):
+				if not isinstance(v, str):
+					continue
+				if k == "soundVolume":
+					newVal = _to_int(v, 80)
+				elif v.strip().lower() in ("true", "false"):
+					newVal = _to_bool(v)
+				else:
+					continue
+				if newVal != v:
+					sec[k] = newVal
+					changed = True
+			if changed:
 				try:
-					loc = locale.getdefaultlocale()[0] or ""
-					if loc.lower().startswith("pl"):
-						sysLang = "pl"
-				except Exception:
-					pass
-			sec["language"] = sysLang
-
-		# Sanitizacja typów w sekcji outlookSpeechFilter (konwersja str na bool/int)
-		for k, v in list(sec.items()):
-			if k == "soundVolume":
-				sec[k] = _to_int(v, 80)
-			elif k == "language":
-				sec[k] = str(v)
-			elif isinstance(v, str) and v.lower() in ("true", "false", "0", "1"):
-				sec[k] = _to_bool(v)
-
-		try:
-			config.conf.save()
-			log.info("outlookSpeechFilter installTasks: Konfiguracja pomyślnie zapisana.")
-		except Exception as e:
-			log.warning(f"outlookSpeechFilter installTasks: Błąd zapisu konfiguracji: {e}")
+					config.conf.save()
+					log.info("outlookSpeechFilter installTasks: Konfiguracja pomyślnie zapisana.")
+				except Exception as e:
+					log.warning(f"outlookSpeechFilter installTasks: Błąd zapisu konfiguracji: {e}")
 	except Exception as e:
-		log.warning(f"outlookSpeechFilter installTasks: Nie udało się zainicjalizować konfiguracji: {e}")
+		log.warning(f"outlookSpeechFilter installTasks: Nie udało się sprawdzić konfiguracji: {e}")
 
 	log.info("outlookSpeechFilter installTasks: zakończenie zadania onInstall")
 

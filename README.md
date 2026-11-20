@@ -78,6 +78,8 @@ Aby zbudować plik instalacyjny dodatku, uruchom w PowerShellu skrypt:
 powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1
 ```
 
+Skrypt pakuje wyłącznie pliki dodatku (bez `update_info.json`, `updates.json`, `README.md` i `.gitignore`), oblicza sumę SHA-256 pakietu i zapisuje ją wraz z wersją i adresem pobierania do `update_info.json` oraz `updates.json`. Wbudowany aktualizator instaluje tylko pakiety pobrane przez HTTPS z serwerów GitHub, których suma SHA-256 zgadza się z opublikowaną — dlatego do wydania na GitHubie należy wgrać dokładnie ten plik, który zbudowano razem z opublikowanym `update_info.json`.
+
 ---
 
 ## 👤 Autor

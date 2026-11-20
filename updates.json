@@ -1,20 +1,15 @@
 {
-  "docListNavigator": {
-    "version": "1.0.4",
-    "downloadUrl": "G:\\Mój dysk\\Antigravity\\Nvda dodatki\\Pakiety_Instalacyjne\\docListNavigator.nvda-addon",
-    "changelog": "Wersja 1.0.4:\n• Wprowadzenie oficjalnego nazewnictwa Zasad Techniki Prawodawczej:\n  - Rozdział IV\n  - ustęp 1.\n  - pkt 1)\n  - litera a)\n  - tiret pierwszy, tiret drugie, tiret trzecie...\n• Automatyczne wyliczanie kolejności tiretów i podpunktów w ramach nadrzędnego elementu.\n• Pełna integracja ze ścieżką hierarchiczną (NVDA+Alt+L): np. Rozdział IV > ustęp 1. > pkt 1) > litera a) > tiret pierwszy.",
-    "minNVDAVersion": "2021.1.0"
-  },
-  "outlookSpeechFilter": {
-    "version": "1.20.1",
-    "downloadUrl": "https://github.com/strugo10/outlookSpeechFilter/releases/latest/download/outlookSpeechFilter.nvda-addon",
-    "changelog": "Wersja 1.20.1:\n• Poprawiono błąd składni w obsłudze zapisu konfiguracji onSave, przywracając pełną widoczność i ładowanie modułu w NVDA.\n• Wdrożono automatyczną weryfikację poprawności składniowej przed każdą publikacją i wdrożeniem dodatków.",
-    "minNVDAVersion": "2024.1.0"
-  },
-  "outlookImageHelper": {
-    "version": "1.6.2",
-    "downloadUrl": "https://github.com/strugo10/outlookImageHelper/releases/latest/download/outlookImageHelper.nvda-addon",
-    "changelog": "Wersja 1.6.2:\n• Usunięto problematyczną opcję podmiany grafik w samej treści wiadomości (występującą w chronionych e-mailach WordMail). Bezpieczne oglądanie w negatywie (P / I) oraz podgląd powiększony pozostają w pełni dostępne.\n• Usprawniono wykrywanie zaznaczenia wielu wiadomości w programie Outlook przy skrócie Ctrl+NVDA+A oraz skrótach OCR i AI.",
-    "minNVDAVersion": "2024.1.0"
-  }
+    "outlookSpeechFilter":  {
+                                "version":  "1.21.0",
+                                "downloadUrl":  "https://github.com/strugo10/outlookSpeechFilter/releases/latest/download/outlookSpeechFilter.nvda-addon",
+                                "sha256":  "19893852bc251dceeb9f0b85c7a8bce612baa66923b8bcd7fc3357bb854d07a5",
+                                "changelog":  "Wersja 1.21.0 (poprawki bezpieczeństwa, stabilności i wydajności):\n• Nakładka filtrująca jest stosowana wyłącznie do wierszy UIA listy wiadomości i nagłówków grup (bez obiektów IAccessible); widok konwersacji (ThreadHeader) jest filtrowany jak zwykłe wiersze.\n• Błąd podczas budowania nazwy wiersza nie powoduje już ciszy — NVDA odczyta wtedy oryginalną nazwę.\n• Tematy w rodzaju „Załączniki” lub „Read” nie są już połykane — statusy są rozpoznawane tylko w kolumnach statusowych.\n• Dźwięki statusów są odtwarzane przy przejściu fokusu, a nie przy każdym odczycie nazwy; zatrzymywanie dźwięków działa poprawnie.\n• Szybsza nawigacja: buforowana konfiguracja i język, odwołania do Outlooka (COM) tylko w razie potrzeby i tylko gdy zaznaczenie odpowiada bieżącemu wierszowi.\n• Bezpieczniejsze aktualizacje: tylko HTTPS z serwerów GitHub, obowiązkowa weryfikacja sumy SHA-256 i wersji pakietu, pytanie przed instalacją wersji oznaczonej jako niezgodna.\n• Nawigator wątków: sukces skoku ogłaszany tylko po faktycznym przeniesieniu kursora, kopiowanie Alt+K korzysta z tych samych pozycji co skok.\n• Raport diagnostyczny maskuje adresy e-mail i nazwę użytkownika, pomija treść wypowiadaną przez NVDA i ostrzega przed udostępnianiem danych osobowych.\n• Ustawienia: brak zapisu konfiguracji przy starcie i w skrótach przełączających, „Przywróć domyślne” zmienia tylko kontrolki (Anuluj cofa zmiany), instalacja nie nadpisuje języka „automatyczny”.\n• Skróty klawiszowe zdefiniowane w jednym miejscu (NVDA+…), opisy poleceń i komunikaty aktualizacji przetłumaczone na angielski, suwak głośności: Home = 0, End = 100.",
+                                "minNVDAVersion":  "2024.1.0"
+                            },
+    "outlookImageHelper":  {
+                               "version":  "1.6.2",
+                               "downloadUrl":  "https://github.com/strugo10/outlookImageHelper/releases/latest/download/outlookImageHelper.nvda-addon",
+                               "changelog":  "Wersja 1.6.2:\n• Usunięto problematyczną opcję podmiany grafik w samej treści wiadomości (występującą w chronionych e-mailach WordMail). Bezpieczne oglądanie w negatywie (P / I) oraz podgląd powiększony pozostają w pełni dostępne.\n• Usprawniono wykrywanie zaznaczenia wielu wiadomości w programie Outlook przy skrócie Ctrl+NVDA+A oraz skrótach OCR i AI.",
+                               "minNVDAVersion":  "2024.1.0"
+                           }
 }

@@ -6,18 +6,21 @@
 
 from __future__ import annotations
 import array
+import collections
 import ctypes
+from ctypes import wintypes
+import hashlib
 import json
 import locale
 import os
 import platform
 import re
-import shutil
 import sys
 import tempfile
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import wave
 import weakref
@@ -45,7 +48,6 @@ from scriptHandler import script
 import tones
 import ui
 import UIAHandler
-import winsound
 import wx
 
 try:
@@ -53,14 +55,25 @@ try:
 except ImportError:
 	builtinOutlook = None
 
+try:
+	from NVDAObjects.UIA import UIA as _UIAObjectClass
+except ImportError:
+	_UIAObjectClass = None
+
+try:
+	from UIAHandler.utils import createUIAMultiPropertyCondition
+except ImportError:
+	createUIAMultiPropertyCondition = getattr(builtinOutlook, "createUIAMultiPropertyCondition", None)
+
+# initTranslation() udostępnia gettext jako _ (bez katalogów .po dodatek korzysta z własnego mechanizmu _t)
 addonHandler.initTranslation()
 
 CONFIG_SECTION = "outlookSpeechFilter"
 OLD_CONFIG_SECTION = "outlookMessageCleaner"
 ADDON_NAME = "Outlook Speech Filter"
-ADDON_VERSION = "1.20.3"
-ADDON_BUILD = "20261108.2"
-ADDON_BUILD_DATE = "2026-11-08"
+ADDON_VERSION = "1.21.0"
+ADDON_BUILD = "20261120.1"
+ADDON_BUILD_DATE = "2026-11-20"
 ADDON_AUTHOR = "Sławomir Strugarek (z pomocą Antigravity)"
 ADDON_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SOUNDS_DIR = os.path.join(ADDON_DIR, "sounds")
@@ -73,16 +86,22 @@ GITHUB_ISSUES_URL = "https://github.com/strugo10/outlookSpeechFilter/issues"
 GITHUB_RELEASES_URL = "https://github.com/strugo10/outlookSpeechFilter/releases"
 GITHUB_LATEST_DOWNLOAD = "https://github.com/strugo10/outlookSpeechFilter/releases/latest/download/outlookSpeechFilter.nvda-addon"
 DEFAULT_UPDATE_SOURCE_URL = "https://raw.githubusercontent.com/strugo10/outlookSpeechFilter/main/update_info.json"
-DEFAULT_FEEDBACK_FORM_URL = GITHUB_ISSUES_URL
-DEFAULT_FEEDBACK_FORM_URL_PL = GITHUB_ISSUES_URL
-DEFAULT_FEEDBACK_FORM_URL_EN = GITHUB_ISSUES_URL
+SECONDARY_UPDATE_SOURCE_URL = "https://raw.githubusercontent.com/strugo10/outlookSpeechFilter/main/updates.json"
+# Aktualizacje wyłącznie przez HTTPS z serwerów GitHub (również po przekierowaniach).
+# release-assets.githubusercontent.com to obecny host, na który GitHub przekierowuje pobieranie zasobów wydań.
+UPDATE_ALLOWED_HOSTS = (
+	"github.com",
+	"raw.githubusercontent.com",
+	"objects.githubusercontent.com",
+	"release-assets.githubusercontent.com",
+)
+UPDATE_MAX_PACKAGE_SIZE = 50 * 1024 * 1024
 
 confspec = {
 	"enabled": "boolean(default=True)",
 	"threadNavigationEnabled": "boolean(default=True)",
 	"language": "string(default='auto')",
 	"soundTheme": "string(default='associative')",
-	"feedbackFormUrl": "string(default='')",
 	"useSounds": "boolean(default=True)",
 	"soundVolume": "integer(default=80, min=0, max=100)",
 	"soundUnread": "boolean(default=True)",
@@ -186,9 +205,12 @@ def get_effective_language():
 	- Jeśli użytkownik wybrał w ustawieniach 'pl' -> 'pl'
 	- Jeśli użytkownik wybrał w ustawieniach 'en' -> 'en'
 	- Jeśli 'auto': sprawdza język NVDA (languageHandler.getLanguage()). Jeśli polski -> 'pl', inaczej 'en'.
+	Wynik (poza podglądem wyboru w otwartym panelu ustawień) jest buforowany do zmiany konfiguracji.
 	"""
+	global _effective_language_cache
+	# Podgląd języka wybranego w otwartym (jeszcze niezapisanym) panelu ustawień — tylko w wątku głównym wx
 	try:
-		if "_activeSettingsPanelRef" in globals() and _activeSettingsPanelRef:
+		if _activeSettingsPanelRef and wx.IsMainThread():
 			panel = _activeSettingsPanelRef()
 			if panel and hasattr(panel, "languageChoice") and hasattr(panel, "langKeys"):
 				idx = panel.languageChoice.GetSelection()
@@ -196,34 +218,52 @@ def get_effective_language():
 					chosen = panel.langKeys[idx]
 					if chosen in ("pl", "en"):
 						return chosen
+					if chosen == "auto":
+						return _detect_system_language()
 	except Exception:
 		pass
+	cached = _effective_language_cache
+	if cached:
+		return cached
 	try:
 		confLang = config.conf.get(CONFIG_SECTION, {}).get("language", "auto")
 	except Exception:
 		confLang = "auto"
 	if confLang in ("pl", "en"):
-		return confLang
+		result = confLang
+	else:
+		result = _detect_system_language()
+	_effective_language_cache = result
+	return result
+
+
+def _detect_system_language():
+	"""Wykrywa język NVDA (a w razie potrzeby systemu Windows) bez przestarzałego locale.getdefaultlocale()."""
 	try:
 		import languageHandler
-		nvdaLang = languageHandler.getLanguage() or ""
-		if nvdaLang.lower().startswith("pl"):
+		nvdaLang = (languageHandler.getLanguage() or "").lower()
+		if nvdaLang.startswith("pl"):
 			return "pl"
-		if nvdaLang.lower() == "windows" or "default" in nvdaLang.lower():
-			import locale
-			loc = locale.getdefaultlocale()[0] or ""
-			if loc.lower().startswith("pl"):
+		if nvdaLang and nvdaLang != "windows" and "default" not in nvdaLang:
+			return "en"
+		getWinLang = getattr(languageHandler, "getWindowsLanguage", None)
+		if getWinLang:
+			if (getWinLang() or "").lower().startswith("pl"):
 				return "pl"
+			return "en"
 	except Exception:
 		pass
 	try:
-		import locale
-		loc = locale.getdefaultlocale()[0] or ""
-		if loc.lower().startswith("pl"):
+		loc = (locale.getlocale()[0] or "").lower()
+		if loc.startswith("pl") or loc.startswith("polish"):
 			return "pl"
 	except Exception:
 		pass
 	return "en"
+
+
+_effective_language_cache = None
+_activeSettingsPanelRef = None
 
 
 def get_doc_path():
@@ -715,10 +755,6 @@ TRANSLATIONS = {
 		"pl": "Podziel się dodatkiem ze znajomymi",
 		"en": "Share Add-on with Others",
 	},
-	"UPDATE_SOURCE_LABEL": {
-		"pl": "&Adres URL źródła aktualizacji (GitHub):",
-		"en": "&Update Source URL (GitHub):",
-	},
 	"RESTORE_DEFAULTS_BTN": {
 		"pl": "Przywróć ustawienia domyślne...",
 		"en": "Restore default settings...",
@@ -1071,6 +1107,190 @@ TRANSLATIONS = {
 		"pl": "Przełącza nawigator wątków wiadomości w programie Outlook",
 		"en": "Toggles conversation thread navigator in Microsoft Outlook",
 	},
+	"GROUP_ITEMS_COUNT": {
+		"pl": "{count} elementów",
+		"en": "{count} items",
+	},
+	"MSG_INFO_TITLE": {
+		"pl": "Informacja",
+		"en": "Information",
+	},
+	"MSG_CONFIRM_TITLE": {
+		"pl": "Potwierdzenie",
+		"en": "Confirmation",
+	},
+	"BTN_CLOSE_ACCEL": {
+		"pl": "&Zamknij",
+		"en": "&Close",
+	},
+	"SETTINGS_LOAD_ERROR": {
+		"pl": "Wystąpił błąd podczas ładowania panelu ustawień Outlook Speech Filter: {err}",
+		"en": "An error occurred while loading the Outlook Speech Filter settings panel: {err}",
+	},
+	"AUTO_UPDATES_CB": {
+		"pl": "&Automatycznie sprawdzaj dostępność aktualizacji przy uruchomieniu NVDA",
+		"en": "&Automatically check for updates when NVDA starts",
+	},
+	"CHECK_UPDATES_BTN": {
+		"pl": "&Sprawdź dostępność aktualizacji teraz",
+		"en": "&Check for updates now",
+	},
+	"CONTACT_REPORT_COPY_FAILED": {
+		"pl": "Nie udało się skopiować raportu do schowka.",
+		"en": "Could not copy the report to the clipboard.",
+	},
+	"REPORT_PRIVACY_WARNING": {
+		"pl": "Uwaga: raport może zawierać dane osobowe (np. fragmenty dziennika NVDA, nazwy okien lub plików). Adresy e-mail i nazwa użytkownika w ścieżkach są maskowane automatycznie, ale przed publicznym udostępnieniem raportu (np. na GitHubie) przejrzyj jego treść.",
+		"en": "Warning: the report may contain personal data (e.g. NVDA log excerpts, window or file names). E-mail addresses and the user name in paths are masked automatically, but please review the report before sharing it publicly (e.g. on GitHub).",
+	},
+	"THREAD_FILTER_RESULTS": {
+		"pl": "Wyników: {count}",
+		"en": "Results: {count}",
+	},
+	"UPD_DLG_TITLE": {
+		"pl": "Aktualizacja: {title}",
+		"en": "Update: {title}",
+	},
+	"UPD_HEADER": {
+		"pl": "Dostępna jest nowa wersja dodatku: {title}!",
+		"en": "A new version of the add-on is available: {title}!",
+	},
+	"UPD_VERSIONS": {
+		"pl": "Zainstalowana wersja: {local}   --->   Nowa wersja: {remote}",
+		"en": "Installed version: {local}   --->   New version: {remote}",
+	},
+	"UPD_CHANGES_LABEL": {
+		"pl": "&Wykaz nowości i ulepszeń w tej wersji:",
+		"en": "&What's new in this version:",
+	},
+	"UPD_NO_CHANGELOG": {
+		"pl": "Brak dodatkowego opisu zmian.",
+		"en": "No description of changes provided.",
+	},
+	"UPD_PROMPT": {
+		"pl": "Czy chcesz teraz pobrać i zainstalować tę aktualizację?",
+		"en": "Do you want to download and install this update now?",
+	},
+	"UPD_BTN_INSTALL": {
+		"pl": "&Zaktualizuj teraz",
+		"en": "&Update now",
+	},
+	"UPD_BTN_LATER": {
+		"pl": "&Przypomnij później",
+		"en": "&Remind me later",
+	},
+	"UPD_TITLE": {
+		"pl": "Aktualizacje: {title}",
+		"en": "Updates: {title}",
+	},
+	"UPD_CHECK_FAILED": {
+		"pl": "Nie udało się sprawdzić aktualizacji dla dodatku {title}.\n\nSzczegóły: {err}",
+		"en": "Could not check for updates of {title}.\n\nDetails: {err}",
+	},
+	"UPD_UP_TO_DATE": {
+		"pl": "Posiadasz najnowszą wersję dodatku {title} ({ver}).\nBrak nowszych aktualizacji w serwisie GitHub.",
+		"en": "You have the latest version of {title} ({ver}).\nNo newer updates are available on GitHub.",
+	},
+	"UPD_UNEXPECTED_ERROR": {
+		"pl": "Wystąpił nieoczekiwany błąd podczas sprawdzania aktualizacji:\n{err}",
+		"en": "An unexpected error occurred while checking for updates:\n{err}",
+	},
+	"UPD_ERROR_TITLE": {
+		"pl": "Błąd: {title}",
+		"en": "Error: {title}",
+	},
+	"UPD_DOWNLOADING": {
+		"pl": "Pobieranie aktualizacji dla {title} z serwisu GitHub...",
+		"en": "Downloading update for {title} from GitHub...",
+	},
+	"UPD_ERR_NETWORK": {
+		"pl": "Nie udało się połączyć z serwerem aktualizacji GitHub (błąd sieci): {err}",
+		"en": "Could not connect to the GitHub update server (network error): {err}",
+	},
+	"UPD_ERR_NO_ENTRY": {
+		"pl": "Brak wpisu dla dodatku '{name}' w pliku informacji o aktualizacji.",
+		"en": "No entry for add-on '{name}' in the update information file.",
+	},
+	"UPD_ERR_JSON": {
+		"pl": "Błąd przetwarzania formatu JSON: {err}",
+		"en": "JSON parsing error: {err}",
+	},
+	"UPD_ERR_URL": {
+		"pl": "Niedozwolony adres aktualizacji (dozwolone jest wyłącznie HTTPS z serwerów GitHub): {url}",
+		"en": "Update address not allowed (only HTTPS from GitHub servers is permitted): {url}",
+	},
+	"UPD_ERR_NO_SHA": {
+		"pl": "Informacja o aktualizacji nie zawiera sumy kontrolnej SHA-256. Instalacja została zablokowana ze względów bezpieczeństwa.",
+		"en": "The update information does not contain a SHA-256 checksum. Installation was blocked for security reasons.",
+	},
+	"UPD_ERR_SHA_MISMATCH": {
+		"pl": "Suma kontrolna SHA-256 pobranego pakietu nie zgadza się z opublikowaną. Pakiet został odrzucony.",
+		"en": "The SHA-256 checksum of the downloaded package does not match the published one. The package was rejected.",
+	},
+	"UPD_ERR_TOO_BIG": {
+		"pl": "Pobrany pakiet przekracza dopuszczalny rozmiar.",
+		"en": "The downloaded package exceeds the allowed size.",
+	},
+	"UPD_ERR_MANIFEST": {
+		"pl": "Pobrany pakiet nie zawiera prawidłowego pliku manifest.ini.",
+		"en": "The downloaded package does not contain a valid manifest.ini file.",
+	},
+	"UPD_ERR_NAME": {
+		"pl": "Niezgodna nazwa dodatku w pakiecie: oczekiwano '{expected}', otrzymano '{got}'.",
+		"en": "Add-on name mismatch in package: expected '{expected}', got '{got}'.",
+	},
+	"UPD_ERR_NOT_NEWER": {
+		"pl": "Wersja w pobranym pakiecie ({ver}) nie jest nowsza od zainstalowanej ({cur}).",
+		"en": "The version in the downloaded package ({ver}) is not newer than the installed one ({cur}).",
+	},
+	"UPD_INCOMPATIBLE": {
+		"pl": "Pobrana wersja dodatku nie jest kompatybilna z bieżącą wersją NVDA.",
+		"en": "The downloaded add-on version is not compatible with the current NVDA version.",
+	},
+	"UPD_OVERRIDE_CONFIRM": {
+		"pl": "Pobrana wersja dodatku {title} ({ver}) nie jest oznaczona jako zgodna z bieżącą wersją NVDA.\n\nCzy mimo to chcesz ją zainstalować? Dodatek może działać nieprawidłowo.",
+		"en": "The downloaded version of {title} ({ver}) is not marked as compatible with the current NVDA version.\n\nDo you want to install it anyway? The add-on may not work correctly.",
+	},
+	"UPD_OVERRIDE_TITLE": {
+		"pl": "Niezgodna wersja dodatku",
+		"en": "Incompatible add-on version",
+	},
+	"UPD_OVERRIDE_DECLINED": {
+		"pl": "Instalacja niezgodnej wersji została anulowana.",
+		"en": "Installation of the incompatible version was cancelled.",
+	},
+	"UPD_SUCCESS": {
+		"pl": "Pomyślnie zaktualizowano dodatek {title} do wersji {ver}.\n\nCzy chcesz teraz zrestartować NVDA, aby zastosować zmiany?",
+		"en": "{title} was successfully updated to version {ver}.\n\nDo you want to restart NVDA now to apply the changes?",
+	},
+	"UPD_SUCCESS_TITLE": {
+		"pl": "Aktualizacja zakończona sukcesem",
+		"en": "Update completed successfully",
+	},
+	"UPD_INSTALL_FAILED": {
+		"pl": "Nie udało się zainstalować aktualizacji dodatku {title}.\n\nSzczegóły błędu:\n{err}",
+		"en": "Could not install the update of {title}.\n\nError details:\n{err}",
+	},
+	"UPD_INSTALL_FAILED_TITLE": {
+		"pl": "Błąd instalacji: {title}",
+		"en": "Installation error: {title}",
+	},
+	"UPD_UNKNOWN_INSTALL_ERROR": {
+		"pl": "Nieznany błąd instalacji pakietu.",
+		"en": "Unknown package installation error.",
+	},
+	"UPD_INSTALL_RETURNED_NONE": {
+		"pl": "Funkcja instalacji dodatku nie zwróciła obiektu dodatku.",
+		"en": "The add-on installation function did not return an add-on object.",
+	},
+	"UPD_DOWNLOAD_FAILED": {
+		"pl": "Nie udało się pobrać lub zweryfikować aktualizacji:\n{err}",
+		"en": "Could not download or verify the update:\n{err}",
+	},
+	"UPD_DOWNLOAD_FAILED_TITLE": {
+		"pl": "Błąd aktualizacji: {title}",
+		"en": "Update error: {title}",
+	},
 }
 
 REVERSE_MAP = {
@@ -1128,9 +1348,6 @@ def _t(key, **kwargs):
 			pass
 	return val
 
-def _(text):
-	return _t(text)
-
 
 class AccessibleMessageDialog(wx.Dialog):
 	"""
@@ -1141,7 +1358,9 @@ class AccessibleMessageDialog(wx.Dialog):
 	skopiować tekst (Ctrl+C), a także zamknąć okno klawiszem Enter lub Escape.
 	"""
 
-	def __init__(self, parent, message: str, title: str = "Informacja", buttonLabel: str = "&Zamknij"):
+	def __init__(self, parent, message: str, title: str = None, buttonLabel: str = None):
+		title = title or _t("MSG_INFO_TITLE")
+		buttonLabel = buttonLabel or _t("BTN_CLOSE_ACCEL")
 		super().__init__(
 			parent or gui.mainFrame,
 			title=title,
@@ -1189,7 +1408,8 @@ class AccessibleConfirmDialog(wx.Dialog):
 	przejść klawiszem Tab do przycisków 'Tak' lub 'Nie' (lub użyć Alt+T / Alt+N bądź Esc).
 	"""
 
-	def __init__(self, parent, message: str, title: str = "Potwierdzenie", defaultYes: bool = False):
+	def __init__(self, parent, message: str, title: str = None, defaultYes: bool = False):
+		title = title or _t("MSG_CONFIRM_TITLE")
 		super().__init__(
 			parent or gui.mainFrame,
 			title=title,
@@ -1240,7 +1460,7 @@ class AccessibleConfirmDialog(wx.Dialog):
 		wx.CallAfter(_focusText)
 
 
-def showAccessibleMessageBox(message: str, title: str = "Informacja", parent=None, buttonLabel: str = "&Zamknij"):
+def showAccessibleMessageBox(message: str, title: str = None, parent=None, buttonLabel: str = None):
 	"""Wyświetla w pełni dostępne okno komunikatu z fokusem na tekście."""
 	if not wx.IsMainThread():
 		wx.CallAfter(showAccessibleMessageBox, message, title, parent, buttonLabel)
@@ -1254,7 +1474,7 @@ def showAccessibleMessageBox(message: str, title: str = "Informacja", parent=Non
 		gui.mainFrame.postPopup()
 
 
-def showAccessibleConfirmBox(message: str, title: str = "Potwierdzenie", parent=None, defaultYes: bool = False) -> bool:
+def showAccessibleConfirmBox(message: str, title: str = None, parent=None, defaultYes: bool = False) -> bool:
 	"""Wyświetla w pełni dostępne okno pytania Tak/Nie z fokusem na tekście pytania."""
 	gui.mainFrame.prePopup()
 	try:
@@ -1335,7 +1555,11 @@ def generate_diagnostic_report():
 		if logFile and os.path.isfile(logFile):
 			with open(logFile, "r", encoding="utf-8", errors="replace") as f:
 				all_lines = f.readlines()
-			filtered = [l.strip() for l in all_lines if any(k in l.lower() for k in ("outlook", "speechfilter", "messagecleaner", "error", "exception", "traceback"))]
+			filtered = [
+				l.strip() for l in all_lines
+				if any(k in l.lower() for k in ("outlook", "speechfilter", "messagecleaner", "error", "exception", "traceback"))
+				and not _is_private_log_line(l)
+			]
 			for fl in filtered[-50:]:
 				lines.append(f"  {fl}")
 		else:
@@ -1345,7 +1569,43 @@ def generate_diagnostic_report():
 	lines.append("=" * 60)
 	lines.append("KONIEC RAPORTU / END OF REPORT")
 	lines.append("=" * 60)
-	return "\n".join(lines)
+	return _sanitize_report_text("\n".join(lines))
+
+
+# Linie dziennika NVDA, które mogą zawierać wypowiadany lub wyświetlany tekst (treść maili, nazwiska itp.)
+_PRIVATE_LOG_MARKERS = (
+	"speaking",
+	"braille",
+	"speech.speech",
+	"speechsequence",
+	"speech sequence",
+	"speakwithoutpauses",
+	"input: kb",
+	"inputcore.inputmanager.executegesture",
+)
+_RE_EMAIL = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+_RE_USER_PATH = re.compile(r"(?i)([A-Z]:[\\/]+(?:Users|Documents and Settings)[\\/]+)[^\\/\r\n'\"<>|:*?]+")
+
+
+def _is_private_log_line(line: str) -> bool:
+	low = (line or "").lower()
+	return any(m in low for m in _PRIVATE_LOG_MARKERS)
+
+
+def _sanitize_report_text(text: str) -> str:
+	"""Maskuje adresy e-mail oraz nazwę użytkownika w ścieżkach profilu (C:\\Users\\<nazwa>)."""
+	try:
+		text = _RE_EMAIL.sub("<e-mail>", text)
+		text = _RE_USER_PATH.sub(lambda m: m.group(1) + "<user>", text)
+		try:
+			userName = os.environ.get("USERNAME") or ""
+			if len(userName) >= 3:
+				text = re.sub(re.escape(userName), "<user>", text, flags=re.IGNORECASE)
+		except Exception:
+			pass
+	except Exception:
+		pass
+	return text
 
 
 def copy_text_to_clipboard(text):
@@ -1451,8 +1711,6 @@ class ContactAuthorDialog(wx.Dialog):
 				webbrowser.open(url)
 			except Exception as e:
 				log.warning(f"outlookSpeechFilter: nie można otworzyć strony GitHub: {e}")
-			except Exception as e:
-				log.warning(f"outlookSpeechFilter: nie można otworzyć formularza: {e}")
 
 	def onCopyReport(self, evt):
 		rep = self.getReport()
@@ -1460,12 +1718,16 @@ class ContactAuthorDialog(wx.Dialog):
 		if ok:
 			ui.message(_t("CONTACT_REPORT_COPIED_MSG"))
 		else:
-			ui.message("Nie udało się skopiować raportu do schowka.")
+			ui.message(_t("CONTACT_REPORT_COPY_FAILED"))
 
 	def onViewReport(self, evt):
 		rep = self.getReport()
 		dlg = wx.Dialog(self, title=_t("REPORT_VIEW_TITLE"), style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER, size=(600, 480))
 		s = wx.BoxSizer(wx.VERTICAL)
+		# Widoczne ostrzeżenie o danych osobowych (NVDA odczytuje je jako tekst okna dialogowego)
+		warnText = wx.StaticText(dlg, label=_t("REPORT_PRIVACY_WARNING"))
+		warnText.Wrap(560)
+		s.Add(warnText, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=10)
 		tc = wx.TextCtrl(dlg, value=rep, style=wx.TE_MULTILINE | wx.TE_READONLY)
 		tc.SetName(_t("REPORT_VIEW_TITLE"))
 		s.Add(tc, proportion=1, flag=wx.EXPAND | wx.ALL, border=10)
@@ -1494,12 +1756,109 @@ class ContactAuthorDialog(wx.Dialog):
 
 
 # Sound playback debounce state
-_last_sound_time = 0
-_last_sound_key = None
 _pending_debounce_call = None
 _pending_sound_calls = []
-_activeSettingsPanelRef = None
-_msg_attachment_cache = {}
+_last_own_sound_time = 0.0
+# Pamięć podręczna liczników załączników (EntryID -> (realne, wklejone grafiki)), LRU o ograniczonym rozmiarze
+_MSG_ATTACHMENT_CACHE_MAX = 200
+_msg_attachment_cache = collections.OrderedDict()
+
+
+def _attachment_cache_get(entryID):
+	if not entryID:
+		return None
+	val = _msg_attachment_cache.get(entryID)
+	if val is not None:
+		try:
+			_msg_attachment_cache.move_to_end(entryID)
+		except Exception:
+			pass
+	return val
+
+
+def _attachment_cache_put(entryID, value):
+	if not entryID:
+		return
+	_msg_attachment_cache[entryID] = value
+	try:
+		_msg_attachment_cache.move_to_end(entryID)
+		while len(_msg_attachment_cache) > _MSG_ATTACHMENT_CACHE_MAX:
+			_msg_attachment_cache.popitem(last=False)
+	except Exception:
+		_msg_attachment_cache.clear()
+
+
+# ==============================================================================
+# MIGAWKA KONFIGURACJI (odświeżana po zmianie profilu i po zapisie ustawień)
+# ==============================================================================
+
+# Klucz statusu -> (klucz konfiguracji dźwięku, łańcuch zapasowych kluczy zgodności wstecznej, domyślna wartość)
+_SOUND_CONF_SPEC = (
+	("unread", "soundUnread", ("reportUnread",), True),
+	("flag", "soundFlags", ("reportFlags",), False),
+	("attachment", "soundAttachments", ("reportAttachments",), True),
+	("inline_image", "soundInlineImages", ("reportInlineImages",), True),
+	("replied", "soundReplied", ("soundForwardReply", "reportForwardReply"), False),
+	("forwarded", "soundForwarded", ("soundForwardReply", "reportForwardReply"), False),
+	("importance_high", "soundImportanceHigh", ("soundImportance", "reportImportance"), True),
+	("importance_low", "soundImportanceLow", ("soundImportance", "reportImportance"), False),
+	("meeting", "soundMeetingRequest", ("reportMeetingRequest",), True),
+	("category", "soundCategories", ("reportCategories",), False),
+	("external", "soundExternal", ("reportExternal",), False),
+)
+
+_conf_snapshot = None
+_conf_snapshot_gen = 0
+
+
+def _conf_get_chain(conf, key, fallbacks, default):
+	"""Odczyt klucza z łańcuchem zapasowych kluczy (identycznie jak wcześniej zagnieżdżone conf.get)."""
+	val = default
+	for fb in reversed(fallbacks):
+		try:
+			val = conf.get(fb, val)
+		except Exception:
+			pass
+	try:
+		val = conf.get(key, val)
+	except Exception:
+		pass
+	return _to_bool(val, default=default)
+
+
+def _build_conf_snapshot():
+	try:
+		conf = config.conf.get(CONFIG_SECTION, {})
+	except Exception:
+		conf = {}
+	snap = {
+		"enabled": _to_bool(conf.get("enabled", True), default=True),
+		"useSounds": _to_bool(conf.get("useSounds", True), default=True),
+		"threadNavigationEnabled": _to_bool(conf.get("threadNavigationEnabled", True), default=True),
+		"soundVolume": _to_int(conf.get("soundVolume", 80), 80),
+		"soundTheme": str(conf.get("soundTheme", "associative") or "associative"),
+		"sounds": {},
+	}
+	for statusKey, confKey, fallbacks, default in _SOUND_CONF_SPEC:
+		snap["sounds"][statusKey] = _conf_get_chain(conf, confKey, fallbacks, default)
+	return snap
+
+
+def _get_conf_snapshot():
+	global _conf_snapshot
+	snap = _conf_snapshot
+	if snap is None:
+		snap = _build_conf_snapshot()
+		_conf_snapshot = snap
+	return snap
+
+
+def _invalidate_conf_snapshot(*args, **kwargs):
+	"""Unieważnia migawkę konfiguracji, bufor języka i pamięć podręczną wierszy (np. po zmianie profilu)."""
+	global _conf_snapshot, _conf_snapshot_gen, _effective_language_cache
+	_conf_snapshot = None
+	_effective_language_cache = None
+	_conf_snapshot_gen += 1
 
 def get_active_settings_panel():
 	global _activeSettingsPanelRef
@@ -1531,11 +1890,7 @@ def _get_scaled_sound_path(sound_name, volume=None, theme=None):
 			except Exception:
 				volume = None
 		if volume is None:
-			try:
-				conf = config.conf.get(CONFIG_SECTION, {})
-				volume = conf.get("soundVolume", 80)
-			except Exception:
-				volume = 80
+			volume = _get_conf_snapshot().get("soundVolume", 80)
 
 	try:
 		volume = int(volume)
@@ -1557,10 +1912,9 @@ def _get_scaled_sound_path(sound_name, volume=None, theme=None):
 			except Exception:
 				pass
 	if not theme:
-		try:
-			theme = config.conf.get(CONFIG_SECTION, {}).get("soundTheme", "associative")
-		except Exception:
-			theme = "associative"
+		theme = _get_conf_snapshot().get("soundTheme", "associative") or "associative"
+	if theme not in ("associative", "minimal", "instrumental"):
+		theme = "associative"
 
 	theme_dir = os.path.join(SOUNDS_DIR, theme)
 	candidate = os.path.join(theme_dir, f"{sound_name}.wav")
@@ -1614,17 +1968,37 @@ def _get_scaled_sound_path(sound_name, volume=None, theme=None):
 
 def _play_status_sound(sound_name, volume=None, theme=None):
 	"""Play a single status earcon sound file at the specified or configured volume and theme."""
+	global _last_own_sound_time
 	filepath = _get_scaled_sound_path(sound_name, volume=volume, theme=theme)
 	if filepath and os.path.isfile(filepath):
 		try:
 			nvwave.playWaveFile(filepath, asynchronous=True)
+			_last_own_sound_time = time.time()
 		except Exception:
 			pass
 
 
+def _stop_own_wave_playback():
+	"""
+	Zatrzymuje odtwarzanie pliku WAV przez nvwave (nvwave.fileWavePlayer), ale tylko gdy
+	ostatni dźwięk pochodził z tego dodatku — aby nie przerywać innych dźwięków NVDA.
+	"""
+	if time.time() - _last_own_sound_time > 3.0:
+		return
+	try:
+		player = getattr(nvwave, "fileWavePlayer", None)
+		if player:
+			player.stop()
+	except Exception:
+		pass
+
+
 def _stop_pending_sounds():
-	"""Stop all pending scheduled sound timers and immediately purge playing audio."""
+	"""Stop all pending scheduled sound timers and stop this add-on's wave playback."""
 	global _pending_sound_calls, _pending_debounce_call
+	if not wx.IsMainThread():
+		wx.CallAfter(_stop_pending_sounds)
+		return
 	if _pending_debounce_call:
 		try:
 			_pending_debounce_call.Stop()
@@ -1637,15 +2011,15 @@ def _stop_pending_sounds():
 		except Exception:
 			pass
 	_pending_sound_calls.clear()
-	try:
-		winsound.PlaySound(None, winsound.SND_PURGE)
-	except Exception:
-		pass
+	_stop_own_wave_playback()
 
 
 def _schedule_status_sounds_sequence(sound_names, volume=None, delay_ms=230, theme=None):
 	"""Play a sequence of sounds with spacing in ms, cancelling previous calls (for settings dialog tests)."""
 	global _pending_sound_calls
+	if not wx.IsMainThread():
+		wx.CallAfter(_schedule_status_sounds_sequence, sound_names, volume, delay_ms, theme)
+		return
 	_stop_pending_sounds()
 	if not sound_names:
 		return
@@ -1663,6 +2037,9 @@ def _schedule_status_sounds(sound_names, volume=None, debounce_ms=120):
 	Zapobiega to kolejkowaniu dźwięków i zacinaniu nawigacji na wolniejszych komputerach.
 	"""
 	global _pending_debounce_call, _pending_sound_calls
+	if not wx.IsMainThread():
+		wx.CallAfter(_schedule_status_sounds, sound_names, volume, debounce_ms)
+		return
 	_stop_pending_sounds()
 	if not sound_names:
 		return
@@ -1683,6 +2060,45 @@ def _schedule_status_sounds(sound_names, volume=None, debounce_ms=120):
 _original_UIAGridRow_get_name = None
 _original_getReceivedMessageString = None
 _patches_applied = False
+
+
+# Słowa kluczowe nagłówków kolumn statusowych (ikony/stany), w których tokeny typu „Przeczytana”,
+# „Załączniki”, „Przesłano dalej” oznaczają status, a nie treść wiadomości.
+STATUS_COLUMN_HEADER_KEYWORDS = (
+	"załącznik", "attachment",
+	"przeczyt", "read",
+	"ikona", "icon",
+	"ważność", "waznosc", "priorytet", "importance", "priority",
+	"flag",
+	"zewnętrzn", "external",
+	"stan", "status",
+	"odpowiedz", "reply", "replied", "przesłan", "forward",
+)
+# Kolumny z treścią wiadomości — nigdy nie usuwamy z nich tekstu jako „statusu”.
+CONTENT_COLUMN_HEADERS = {
+	"temat", "subject", "od", "from", "do", "to", "nadawca", "sender", "adresat", "recipient",
+	"dw", "cc", "odebrano", "received", "wysłano", "sent", "rozmiar", "size",
+	"w folderze", "in folder", "folder", "kategorie", "categories", "podgląd", "preview",
+}
+# Tokeny jednoznaczne — dopuszczalne do odfiltrowania nawet bez informacji o nagłówku kolumny.
+UNAMBIGUOUS_ATTACHMENT_RE = re.compile(r'^(?:has\s+attachments?|ma\s+załączniki?)(?:\s*:\s*\d+)?$', re.IGNORECASE)
+
+
+def _classify_column(headerNames):
+	"""
+	Zwraca 'content' (temat, od, ...), 'status' (kolumna ikon/stanów) lub '' (nieznana / brak nagłówka)
+	na podstawie nazw nagłówków kolumn UIA (TableItem.ColumnHeaderItems).
+	"""
+	kind = ""
+	for h in headerNames:
+		hl = (h or "").strip().lower().rstrip(":").strip()
+		if not hl:
+			continue
+		if hl in CONTENT_COLUMN_HEADERS:
+			return "content"
+		if any(k in hl for k in STATUS_COLUMN_HEADER_KEYWORDS):
+			kind = "status"
+	return kind
 
 
 ATTACHMENT_TOKENS = {
@@ -1736,10 +2152,6 @@ def _is_attachment_inline_image(att):
 		attType = int(getattr(att, "Type", 1) or 1)
 		# Typ 6 to olOLE (osadzony obiekt OLE)
 		if attType == 6 and (fn.startswith("oledata") or not ext):
-			return True
-
-		# Zrzuty ekranu wklejane ze schowka automatycznie nazywane przez Outlook (np. image001.png)
-		if ext in IMAGE_EXTENSIONS and re.match(r'^image\d{3,}\.(?:png|jpg|jpeg|gif|bmp)$', fn) and (cid or not fn):
 			return True
 
 		return False
@@ -2006,33 +2418,84 @@ def _get_message_statuses_report(appModule, selection, windowThreadID=None, uiaO
 	# 8. External
 	isExternal = _is_external_message(selection, uiaObj)
 
-	# Build result strictly adhering to CANONICAL_STATUS_ORDER
-	statuses = []
-	for status_key in CANONICAL_STATUS_ORDER:
-		if status_key == "unread" and isUnread:
-			statuses.append(_t("STATUS_UNREAD"))
-		elif status_key == "flag" and hasFlag:
-			statuses.append(_t("STATUS_FLAG"))
-		elif status_key == "attachment" and realCount > 0:
-			statuses.append(_format_attachment_status(realCount))
-		elif status_key == "inline_image" and inlineImgCount > 0:
-			statuses.append(_format_inline_images_status(inlineImgCount))
-		elif status_key == "replied" and verbText and verbSound == "replied":
-			statuses.append(verbText)
-		elif status_key == "forwarded" and verbText and verbSound == "forwarded":
-			statuses.append(verbText)
-		elif status_key == "importance_high" and importanceText and importanceSound == "importance_high":
-			statuses.append(importanceText)
-		elif status_key == "importance_low" and importanceText and importanceSound == "importance_low":
-			statuses.append(importanceText)
-		elif status_key == "meeting" and isMeeting:
-			statuses.append(_t("STATUS_MEETING"))
-		elif status_key == "category" and catText:
-			statuses.append(catText)
-		elif status_key == "external" and isExternal:
-			statuses.append(_t("STATUS_EXTERNAL"))
+	return _build_status_items({
+		"unread": isUnread,
+		"flag": hasFlag,
+		"attachments": realCount,
+		"inline_images": inlineImgCount,
+		"verb_key": verbSound,
+		"verb_text": verbText,
+		"importance": 2 if importanceSound == "importance_high" else (0 if importanceSound == "importance_low" else 1),
+		"meeting": isMeeting,
+		"category": bool(catText),
+		"category_text": catText,
+		"external": isExternal,
+	})
 
-	return statuses
+
+def _build_status_items(st):
+	"""
+	Jedyne miejsce budowania listy statusów wiadomości w kolejności CANONICAL_STATUS_ORDER.
+	Zwraca listę krotek (klucz_statusu, tekst). Klucz statusu jest jednocześnie nazwą dźwięku.
+	"""
+	items = []
+	for key in CANONICAL_STATUS_ORDER:
+		if key == "unread":
+			if st.get("unread"):
+				items.append((key, _t("STATUS_UNREAD")))
+		elif key == "flag":
+			if st.get("flag"):
+				items.append((key, _t("STATUS_FLAG")))
+		elif key == "attachment":
+			cnt = st.get("attachments", 0) or 0
+			if cnt > 0:
+				items.append((key, _format_attachment_status(cnt)))
+		elif key == "inline_image":
+			cnt = st.get("inline_images", 0) or 0
+			if cnt > 0:
+				items.append((key, _format_inline_images_status(cnt)))
+		elif key in ("replied", "forwarded"):
+			if st.get("verb_key") == key and st.get("verb_text"):
+				items.append((key, st["verb_text"]))
+		elif key == "importance_high":
+			if st.get("importance") == 2:
+				items.append((key, _t("STATUS_IMPORTANCE_HIGH")))
+		elif key == "importance_low":
+			if st.get("importance") == 0:
+				items.append((key, _t("STATUS_IMPORTANCE_LOW")))
+		elif key == "meeting":
+			if st.get("meeting"):
+				items.append((key, _t("STATUS_MEETING")))
+		elif key == "category":
+			if st.get("category") or st.get("category_text"):
+				items.append((key, st.get("category_text") or _t("STATUS_CATEGORY", cat="")))
+		elif key == "external":
+			if st.get("external"):
+				items.append((key, _t("STATUS_EXTERNAL")))
+	return items
+
+
+def _sounds_for_status_items(items, snap=None):
+	"""Zwraca listę dźwięków do odtworzenia dla podanych statusów zgodnie z konfiguracją."""
+	snap = snap or _get_conf_snapshot()
+	if not snap.get("useSounds"):
+		return []
+	sounds = []
+	for key, _text in items:
+		if not snap["sounds"].get(key):
+			continue
+		if key == "inline_image" and _is_image_helper_handling_inline_sounds():
+			continue
+		sounds.append(key)
+	return sounds
+
+
+def _status_order_key(key):
+	"""Dokładna pozycja statusu w CANONICAL_STATUS_ORDER (bez dopasowywania podciągów)."""
+	try:
+		return CANONICAL_STATUS_ORDER.index(key)
+	except ValueError:
+		return len(CANONICAL_STATUS_ORDER)
 
 
 KNOWN_COLORS = (
@@ -2070,7 +2533,7 @@ def _clean_group_header_name(rawName):
 	countMatch = re.search(r'\((?:Liczba elementów|Items?|Elementy):\s*(\d+)\)', mainPart, re.IGNORECASE)
 	countText = ""
 	if countMatch:
-		countText = f"{countMatch.group(1)} elementów"
+		countText = _t("GROUP_ITEMS_COUNT", count=countMatch.group(1))
 
 	clean = re.sub(r'\((?:Liczba elementów|Items?|Elementy):\s*\d+\)', '', mainPart, flags=re.IGNORECASE)
 	clean = re.sub(r'\b(?:grupuj według|group by)\s*:\s*', '', clean, flags=re.IGNORECASE)
@@ -2102,174 +2565,215 @@ def _clean_group_header_name(rawName):
 
 _in_custom_get_name = False
 
+# Klasy UIA wierszy wiadomości w Outlooku — zgodnie z nvdaBuiltin.appModules.outlook
+# (AppModule.chooseNVDAObjectOverlayClasses: LeafRow, ThreadItem, ThreadHeader -> UIAGridRow).
+# ThreadHeader to nagłówek konwersacji traktowany przez NVDA jako wiersz wiadomości (poziom 1), a nie nagłówek grupy.
+MESSAGE_ROW_CLASSES = ("LeafRow", "ThreadItem", "ThreadHeader")
+# Nagłówki grup (np. „Grupuj według: Kategorie”) rozpoznawane wyłącznie po klasie UIA
+GROUP_HEADER_CLASSES = ("GroupHeader", "OutlookGridGroupHeader")
+# Statusy, których ustalenie wymaga modelu obiektowego Outlooka (COM)
+COM_STATUS_KEYS = ("unread", "flag", "attachment", "inline_image", "importance_high", "importance_low", "meeting", "category", "external")
+_RE_SUBJECT_PREFIX = re.compile(r'^\s*(?:(?:re|fw|fwd|odp|pd|aw|wg|tr|sv|vs)\s*:\s*)+', re.IGNORECASE)
+_NO_CATEGORY_NAMES = ("bez kategorii", "brak kategorii", "no category", "no categories", "none")
+
 
 def _custom_UIAGridRow_get_name(self):
+	"""
+	Getter nazwy wiersza listy wiadomości Outlooka.
+	Nie ma efektów ubocznych (dźwięki są odtwarzane w event_gainFocus wiersza),
+	a każdy błąd (np. COMError) kończy się powrotem do oryginalnej nazwy zamiast ciszy.
+	"""
 	global _in_custom_get_name
 	if _in_custom_get_name:
-		if _original_UIAGridRow_get_name:
-			try:
-				return _original_UIAGridRow_get_name(self)
-			except Exception:
-				pass
-		return getattr(getattr(self, "UIAElement", None), "cachedName", "") or ""
-
+		return _fallback_row_name(self)
 	_in_custom_get_name = True
 	try:
-		return _custom_UIAGridRow_get_name_impl(self)
+		return _get_row_info(self)[0]
+	except Exception:
+		log.debugWarning("outlookSpeechFilter: błąd budowania nazwy wiersza Outlooka, używam nazwy oryginalnej", exc_info=True)
+		return _fallback_row_name(self)
 	finally:
 		_in_custom_get_name = False
 
 
-def _custom_UIAGridRow_get_name_impl(self):
-	conf = config.conf.get(CONFIG_SECTION, {})
-	enabled = _to_bool(conf.get("enabled", True), default=True)
-	useSounds = _to_bool(conf.get("useSounds", True), default=True)
+def _fallback_row_name(obj):
+	if _original_UIAGridRow_get_name:
+		try:
+			return _original_UIAGridRow_get_name(obj)
+		except Exception:
+			log.debugWarning("outlookSpeechFilter: oryginalny UIAGridRow._get_name zgłosił wyjątek", exc_info=True)
+	return _raw_uia_name(obj)
+
+
+def _raw_uia_name(obj):
+	el = getattr(obj, "UIAElement", None)
+	if el is None:
+		return ""
+	name = ""
+	try:
+		name = el.cachedName
+	except Exception:
+		name = ""
+	if not name:
+		try:
+			name = el.currentName
+		except Exception:
+			name = ""
+	return name or ""
+
+
+def _uia_class_name(obj):
+	try:
+		return getattr(getattr(obj, "UIAElement", None), "cachedClassName", "") or ""
+	except Exception:
+		return ""
+
+
+def _is_row_related_to_focus(obj):
+	try:
+		curFocus = api.getFocusObject()
+		if curFocus is obj:
+			return True
+		return (getattr(curFocus, "parent", None) is obj) or (getattr(obj, "parent", None) is curFocus)
+	except Exception:
+		return True
+
+
+def _get_row_info(obj):
+	"""
+	Zwraca (tekst_do_odczytu, statusy[(klucz, tekst)], dźwięki[]) dla wiersza.
+	Wynik jest zapamiętywany na obiekcie (do zmiany surowej nazwy UIA, stanu rozwinięcia,
+	konfiguracji lub fokusu), aby event_gainFocus i odczyt nazwy nie odpytywały COM dwukrotnie.
+	"""
+	snap = _get_conf_snapshot()
+	rawName = _raw_uia_name(obj)
+	related = _is_row_related_to_focus(obj)
+	try:
+		states = obj.states
+	except Exception:
+		states = set()
+	expandKey = (controlTypes.State.EXPANDED in states, controlTypes.State.COLLAPSED in states)
+	key = (rawName, expandKey, related, _conf_snapshot_gen, get_effective_language())
+	cached = getattr(obj, "_osf_rowCache", None)
+	if cached and cached[0] == key:
+		return cached[1]
+	result = _compute_row_info(obj, snap, rawName, related, states)
+	try:
+		obj._osf_rowCache = (key, result)
+	except Exception:
+		pass
+	return result
+
+
+def _get_single_selection(obj):
+	"""Zwraca element zaznaczony w Outlooku (COM), gdy zaznaczony jest dokładnie jeden."""
+	try:
+		nativeOm = obj.appModule.nativeOm
+		if not nativeOm:
+			return None
+		explorer = nativeOm.activeExplorer()
+		sel = getattr(explorer, "selection", None)
+		if sel is not None and getattr(sel, "Count", 0) == 1:
+			return sel.item(1)
+	except (COMError, Exception):
+		pass
+	return None
+
+
+def _normalize_subject(subject):
+	s = (subject or "").strip().lower()
+	s = _RE_SUBJECT_PREFIX.sub("", s)
+	for tag in EXTERNAL_PREFIXES:
+		if s.startswith(tag):
+			s = s[len(tag):].strip(" -:,")
+			break
+	s = _RE_SUBJECT_PREFIX.sub("", s)
+	return re.sub(r"\s+", " ", s).strip()
+
+
+def _selection_matches_row(selection, rawName, cellTexts):
+	"""
+	Chroni przed wyścigiem „nieaktualnego zaznaczenia”: dane COM są używane tylko wtedy,
+	gdy temat zaznaczonego elementu występuje w tekście wiersza, którego nazwę budujemy.
+	"""
+	try:
+		subject = selection.Subject
+	except Exception:
+		return True
+	ns = _normalize_subject(subject)
+	if not ns:
+		return True
+	hay = re.sub(r"\s+", " ", (rawName + " " + " ".join(cellTexts)).lower())
+	if not hay.strip():
+		return True
+	return ns[:60] in hay
+
+
+def _get_attachment_counts(selection, uiaObj, needInline):
+	"""Liczniki (realne załączniki, wklejone grafiki) z pamięcią podręczną LRU wg EntryID."""
+	entryID = None
+	try:
+		entryID = selection.EntryID
+	except Exception:
+		entryID = None
+	cachedVal = _attachment_cache_get(entryID)
+	if cachedVal is not None:
+		real, inline = cachedVal
+		if inline is not None or not needInline:
+			return real, (inline or 0)
+	else:
+		real = _get_real_attachments_count(selection, uiaObj)
+	inline = _get_inline_images_count(selection) if needInline else None
+	_attachment_cache_put(entryID, (real, inline))
+	return real, (inline or 0)
+
+
+def _compute_row_info(obj, snap, rawName, related, states):
+	enabled = snap["enabled"]
+	useSounds = snap["useSounds"]
 	speakStatuses = not enabled
+	cachedCls = _uia_class_name(obj)
 
-	# 1. Obsługa nagłówków grup (np. grupowanie wg flag lub kategorii)
-	cachedCls = getattr(getattr(self, "UIAElement", None), "cachedClassName", "") or ""
-	rawName = getattr(getattr(self, "UIAElement", None), "cachedName", "") or getattr(getattr(self, "UIAElement", None), "currentName", "") or ""
-	if not rawName:
-		if _original_UIAGridRow_get_name:
-			try:
-				rawName = _original_UIAGridRow_get_name(self) or ""
-			except Exception:
-				rawName = ""
-
-	lowerName = rawName.lower()
-	isHeaderCls = cachedCls in ("ThreadHeader", "GroupHeader", "OutlookGridGroupHeader")
-	isHeaderRole = getattr(self, "role", None) in (controlTypes.Role.GROUPING, controlTypes.Role.HEADER)
-	isHeaderName = any(k in lowerName for k in ("grupuj według", "group by", "kategorie:", "kategoria:", "flaga:", "status flagi:"))
-
-	if isHeaderCls or isHeaderRole or isHeaderName:
-		cleanHeader = _clean_group_header_name(rawName)
+	# 1. Nagłówki grup (grupowanie wg flag lub kategorii) — rozpoznawane wyłącznie po klasie UIA
+	if cachedCls in GROUP_HEADER_CLASSES:
+		headerName = rawName or _fallback_row_name(obj)
+		cleanHeader = _clean_group_header_name(headerName)
 		if cleanHeader:
-			stateList = []
-			if controlTypes.State.COLLAPSED in self.states:
-				stateList.append(controlTypes.State.COLLAPSED.displayString)
-			elif controlTypes.State.EXPANDED in self.states:
-				stateList.append(controlTypes.State.EXPANDED.displayString)
-			if stateList:
-				return f"{cleanHeader}, {stateList[0]}"
-			return cleanHeader
+			if controlTypes.State.COLLAPSED in states:
+				return (f"{cleanHeader}, {controlTypes.State.COLLAPSED.displayString}", [], [])
+			if controlTypes.State.EXPANDED in states:
+				return (f"{cleanHeader}, {controlTypes.State.EXPANDED.displayString}", [], [])
+			return (cleanHeader, [], [])
 
 	textList = []
-	if controlTypes.State.EXPANDED in self.states:
+	if controlTypes.State.EXPANDED in states:
 		textList.append(controlTypes.State.EXPANDED.displayString)
-	elif controlTypes.State.COLLAPSED in self.states:
+	elif controlTypes.State.COLLAPSED in states:
 		textList.append(controlTypes.State.COLLAPSED.displayString)
 
-	# Konfiguracja poszczególnych statusów (domyślne ustawienia) z jawną konwersją bool
-	soundUnread = _to_bool(conf.get("soundUnread", conf.get("reportUnread", True)), default=True)
-	soundFlags = _to_bool(conf.get("soundFlags", conf.get("reportFlags", False)), default=False)
-	soundAttachments = _to_bool(conf.get("soundAttachments", conf.get("reportAttachments", True)), default=True)
-	soundInlineImages = _to_bool(conf.get("soundInlineImages", conf.get("reportInlineImages", True)), default=True)
-	soundReplied = _to_bool(conf.get("soundReplied", conf.get("soundForwardReply", conf.get("reportForwardReply", False))), default=False)
-	soundForwarded = _to_bool(conf.get("soundForwarded", conf.get("soundForwardReply", conf.get("reportForwardReply", False))), default=False)
-	soundImportanceHigh = _to_bool(conf.get("soundImportanceHigh", conf.get("soundImportance", conf.get("reportImportance", True))), default=True)
-	soundImportanceLow = _to_bool(conf.get("soundImportanceLow", conf.get("soundImportance", conf.get("reportImportance", False))), default=False)
-	soundMeetingRequest = _to_bool(conf.get("soundMeetingRequest", conf.get("reportMeetingRequest", True)), default=True)
-	soundCategories = _to_bool(conf.get("soundCategories", conf.get("reportCategories", False)), default=False)
-	soundExternal = _to_bool(conf.get("soundExternal", conf.get("reportExternal", False)), default=False)
+	st = {
+		"unread": False,
+		"flag": False,
+		"attachments": 0,
+		"inline_images": 0,
+		"verb_key": None,
+		"verb_text": None,
+		"importance": 1,
+		"meeting": False,
+		"category": False,
+		"category_text": None,
+		"external": False,
+	}
+	uiaUnread = None
+	uiaAttachmentCount = 0
 
-	unread = False
-	hasFlag = False
-	realAttCount = 0
-	inlineImgCount = 0
-	verbText = None
-	verbSound = None
-	importanceText = None
-	importanceSound = None
-	isMeeting = False
-	hasCats = False
-	catText = None
-	isExternalFound = False
-
-	selection = None
-	if self.appModule.nativeOm:
-		try:
-			explorer = self.appModule.nativeOm.activeExplorer()
-			sel = getattr(explorer, "selection", None)
-			# Używamy COM selection wyłącznie, gdy zaznaczony jest dokładnie 1 element
-			if sel is not None and getattr(sel, "Count", 0) == 1:
-				try:
-					curFocus = api.getFocusObject()
-					isRelated = (curFocus is self) or (getattr(curFocus, "parent", None) is self) or (getattr(self, "parent", None) is curFocus)
-				except Exception:
-					isRelated = True
-				if isRelated:
-					selection = sel.item(1)
-		except (COMError, Exception):
-			selection = None
-
-	if selection:
-		# 1. Stan nieprzeczytania (unread)
-		try:
-			unread = bool(selection.unread)
-		except (COMError, Exception):
-			unread = False
-
-		# 2. Flagi
-		try:
-			hasFlag = bool(selection.flagIcon or selection.flagStatus)
-		except (COMError, Exception):
-			hasFlag = False
-
-		# 3. Informacja o załącznikach (tylko realne pliki, bez inline grafik)
-		entryID = None
-		try:
-			entryID = selection.EntryID
-		except Exception:
-			pass
-
-		if entryID and entryID in _msg_attachment_cache:
-			realAttCount, inlineImgCount = _msg_attachment_cache[entryID]
-		else:
-			realAttCount = _get_real_attachments_count(selection, self)
-			needInline = _to_bool(conf.get("soundInlineImages", True)) or _to_bool(conf.get("reportInlineImages", True)) or speakStatuses
-			inlineImgCount = _get_inline_images_count(selection) if needInline else 0
-			if entryID:
-				if len(_msg_attachment_cache) > 200:
-					_msg_attachment_cache.clear()
-				_msg_attachment_cache[entryID] = (realAttCount, inlineImgCount)
-
-		# 4. Status odpowiedzi lub przesłania dalej (replied / forwarded)
-		# Wykrywane w 100% bezpiecznie poniżej z komórek UIA bez odwoływania się do mapiObject
-
-		# 5. Ważność / Priorytet (importance)
-		try:
-			importance = selection.importance
-		except (COMError, Exception):
-			importance = 1
-		if importance == 2:
-			importanceText = _t("STATUS_IMPORTANCE_HIGH")
-			importanceSound = "importance_high"
-		elif importance == 0:
-			importanceText = _t("STATUS_IMPORTANCE_LOW")
-			importanceSound = "importance_low"
-
-		# 6. Żądanie spotkania (meeting request)
-		try:
-			messageClass = selection.messageClass
-		except (COMError, Exception):
-			messageClass = None
-		if messageClass == "IPM.Schedule.Meeting.Request":
-			isMeeting = True
-
-		# 7. Kategorie
-		try:
-			cat = (selection.categories or "").strip()
-			if cat and cat.lower() not in ("bez kategorii", "brak kategorii", "no category", "no categories", "none"):
-				hasCats = True
-				catText = _t("STATUS_CATEGORY", cat=cat)
-		except (COMError, Exception):
-			pass
-
+	# 2. Komórki UIA wiersza (preferowane źródło danych — bez odwołań do COM)
+	conditionFactory = createUIAMultiPropertyCondition or getattr(builtinOutlook, "createUIAMultiPropertyCondition", None)
 	childrenCacheRequest = UIAHandler.handler.baseCacheRequest.clone()
 	childrenCacheRequest.addProperty(UIAHandler.UIA_NamePropertyId)
 	childrenCacheRequest.addProperty(UIAHandler.UIA_TableItemColumnHeaderItemsPropertyId)
 	childrenCacheRequest.TreeScope = UIAHandler.TreeScope_Children
-	childrenCacheRequest.treeFilter = builtinOutlook.createUIAMultiPropertyCondition(
+	childrenCacheRequest.treeFilter = conditionFactory(
 		{
 			UIAHandler.UIA_ControlTypePropertyId: [
 				UIAHandler.UIA_TextControlTypeId,
@@ -2277,69 +2781,50 @@ def _custom_UIAGridRow_get_name_impl(self):
 			],
 		},
 	)
-	cachedChildren = self.UIAElement.buildUpdatedCache(childrenCacheRequest).getCachedChildren()
+	cachedChildren = obj.UIAElement.buildUpdatedCache(childrenCacheRequest).getCachedChildren()
 	if not cachedChildren:
 		log.debugWarning("Unable to get relevant children for UIAGridRow", stack_info=True)
-		if _original_UIAGridRow_get_name:
-			try:
-				return _original_UIAGridRow_get_name(self)
-			except Exception:
-				pass
-		return getattr(getattr(self, "UIAElement", None), "cachedName", "") or ""
+		return (_fallback_row_name(obj), [], [])
+
+	try:
+		reportFlag = config.conf["documentFormatting"]["reportTableHeaders"]
+	except Exception:
+		reportFlag = None
+	allowedFlags = (getattr(ReportTableHeaders, "ROWS_AND_COLUMNS", 2), getattr(ReportTableHeaders, "COLUMNS", 1)) if ReportTableHeaders else (2, 1)
+	reportHeaders = reportFlag in allowedFlags
 
 	contentCells = []
+	cellTexts = []
 
 	for index in range(cachedChildren.length):
 		e = cachedChildren.getElement(index)
 		UIAControlType = e.cachedControlType
 		UIAClassName = e.cachedClassName
 
-		# Flagi
 		if UIAClassName == "FlagField":
-			fName = e.cachedName or ""
-			if not hasFlag and fName:
-				if any(w in fName.lower() for w in ("oflagow", "flaga", "flag")):
-					hasFlag = True
-			if not hasFlag and selection:
-				try:
-					hasFlag = bool(selection.flagIcon or selection.flagStatus)
-				except Exception:
-					pass
+			fName = (e.cachedName or "").lower()
+			if fName and any(w in fName for w in ("oflagow", "flaga", "flag")):
+				st["flag"] = True
 			continue
-
-		# Kategorie
 		elif UIAClassName == "CategoryField":
 			cName = (e.cachedName or "").strip()
-			if cName and cName.lower() not in ("bez kategorii", "brak kategorii", "no category", "no categories", "none"):
-				hasCats = True
-				if not catText:
-					catText = _t("STATUS_CATEGORY", cat=cName)
+			if cName and cName.lower() not in _NO_CATEGORY_NAMES:
+				st["category"] = True
+				if not st["category_text"]:
+					st["category_text"] = _t("STATUS_CATEGORY", cat=cName)
 			continue
-
 		elif UIAControlType != UIAHandler.UIA_TextControlTypeId:
 			continue
 
 		name = e.cachedName
 		if not name:
 			continue
-
+		cellTexts.append(name)
 		cleanName = name.strip().lower()
+		cleanToken = cleanName.rstrip(":").strip()
 
-		# Odpowiedź / przesłanie w komórce
-		if cleanName in FORWARD_REPLY_TOKENS:
-			if not verbText:
-				verbText = name
-				verbSound = "forwarded" if any(w in cleanName for w in ("przesł", "forward")) else "replied"
-			continue
-
-		# Wiadomość zewnętrzna jako osobny token/komórka
-		if cleanName in EXTERNAL_TOKENS or cleanName.rstrip(":").strip() in EXTERNAL_TOKENS:
-			isExternalFound = True
-			continue
-
-		# Sprawdzenie nagłówków kolumn tabeli
-		columnHeaderTextList = []
-		isAttachmentHeader = False
+		# Nagłówki kolumn tabeli (do klasyfikacji kolumny oraz ewentualnego odczytu nagłówków)
+		headerNames = []
 		try:
 			columnHeaderItems = e.getCachedPropertyValueEx(
 				UIAHandler.UIA_TableItemColumnHeaderItemsPropertyId,
@@ -2348,130 +2833,147 @@ def _custom_UIAGridRow_get_name_impl(self):
 			if columnHeaderItems:
 				columnHeaderItems = columnHeaderItems.QueryInterface(UIAHandler.IUIAutomationElementArray)
 				for hIdx in range(columnHeaderItems.length):
-					columnHeaderItem = columnHeaderItems.getElement(hIdx)
-					hName = columnHeaderItem.currentName
-					hClean = hName.strip().lower() if hName else ""
-					if any(w in hClean for w in ("załącznik", "attachment")):
-						isAttachmentHeader = True
-						if realAttCount == 0:
-							realAttCount = _extract_attachment_count(name) or 1
-					if not speakStatuses:
-						if _is_attachment_text(hClean) or hClean in UNREAD_TOKENS or hClean in READ_TOKENS or hClean in FORWARD_REPLY_TOKENS or hClean in EXTERNAL_TOKENS or hClean.rstrip(":").strip() in EXTERNAL_TOKENS:
-							continue
-					reportFlag = config.conf["documentFormatting"]["reportTableHeaders"]
-					allowedFlags = (getattr(ReportTableHeaders, "ROWS_AND_COLUMNS", 2), getattr(ReportTableHeaders, "COLUMNS", 1)) if ReportTableHeaders else (2, 1)
-					if reportFlag in allowedFlags:
-						columnHeaderTextList.append(hName)
+					hName = columnHeaderItems.getElement(hIdx).currentName
+					if hName:
+						headerNames.append(hName)
 		except Exception:
 			pass
 
-		# Jeśli kolumna jest kolumną załączników, pomiń ją w treści, aby nie czytać surowego "1" lub "Załączniki: 1"
+		columnKind = _classify_column(headerNames)
+		isAttachmentHeader = columnKind != "content" and any(
+			("załącznik" in h.lower() or "attachment" in h.lower()) for h in headerNames
+		)
+
+		# Kolumna załączników — nie czytamy surowego „1” lub „Załączniki: 1”
 		if isAttachmentHeader:
+			uiaAttachmentCount = max(uiaAttachmentCount, _extract_attachment_count(name) or 1)
 			continue
 
-		# Załączniki w komórce (wyłącznie gdy komórka jest faktycznym znacznikiem załącznika)
-		if _is_attachment_text(cleanName):
-			if realAttCount == 0:
-				realAttCount = _extract_attachment_count(cleanName) or 1
-			continue
+		# Tokeny statusów są interpretowane tylko w kolumnach statusowych; kolumny z treścią
+		# (Temat, Od, Do...) nigdy nie są usuwane. Bez informacji o kolumnie akceptujemy tylko tokeny jednoznaczne.
+		if columnKind == "status":
+			if cleanName in FORWARD_REPLY_TOKENS:
+				if not st["verb_text"]:
+					st["verb_text"] = name
+					st["verb_key"] = "forwarded" if any(w in cleanName for w in ("przesł", "forward")) else "replied"
+				continue
+			if cleanName in EXTERNAL_TOKENS or cleanToken in EXTERNAL_TOKENS:
+				st["external"] = True
+				continue
+			if _is_attachment_text(cleanName):
+				uiaAttachmentCount = max(uiaAttachmentCount, _extract_attachment_count(cleanName) or 1)
+				continue
+			if cleanName in UNREAD_TOKENS:
+				uiaUnread = True
+				continue
+			if cleanName in READ_TOKENS:
+				uiaUnread = False
+				continue
+		elif columnKind == "" and not headerNames:
+			if cleanName in FORWARD_REPLY_TOKENS:
+				if not st["verb_text"]:
+					st["verb_text"] = name
+					st["verb_key"] = "forwarded" if any(w in cleanName for w in ("przesł", "forward")) else "replied"
+				continue
+			if cleanName.startswith("[") and (cleanName in EXTERNAL_TOKENS or cleanToken in EXTERNAL_TOKENS):
+				st["external"] = True
+				continue
+			if UNAMBIGUOUS_ATTACHMENT_RE.match(cleanName):
+				uiaAttachmentCount = max(uiaAttachmentCount, _extract_attachment_count(cleanName) or 1)
+				continue
+			if cleanName in UNREAD_TOKENS:
+				uiaUnread = True
+				continue
 
-		# Stan przeczytania / nieprzeczytania w komórce
-		if cleanName in UNREAD_TOKENS:
-			unread = True
-			continue
-		elif cleanName in READ_TOKENS:
-			unread = False
-			continue
+		columnHeaderTextList = []
+		if reportHeaders:
+			for hName in headerNames:
+				hClean = hName.strip().lower()
+				if not speakStatuses:
+					if _is_attachment_text(hClean) or hClean in UNREAD_TOKENS or hClean in READ_TOKENS or hClean in FORWARD_REPLY_TOKENS or hClean in EXTERNAL_TOKENS or hClean.rstrip(":").strip() in EXTERNAL_TOKENS:
+						continue
+				columnHeaderTextList.append(hName)
 
 		columnHeaderText = " ".join(columnHeaderTextList)
-		if columnHeaderText:
-			text = f"{columnHeaderText} {name}"
-		else:
-			text = name
+		text = f"{columnHeaderText} {name}" if columnHeaderText else name
 
+		# Wykrywanie i wycinanie prefiksów [Zewnętrzna] (doklejanych do tematu przez serwer)
 		if text:
-			# Wykrywanie i wycinanie prefiksów [Zewnętrzna]
 			for tag in EXTERNAL_PREFIXES:
 				if text.strip().lower().startswith(tag):
-					isExternalFound = True
+					st["external"] = True
 					text = text.strip()[len(tag):].lstrip(" -:,")
 					break
 
 		if text:
 			contentCells.append(text + ",")
 
-	# Weryfikacja wiadomości zewnętrznej
-	isExternal = isExternalFound
-	if not isExternal and selection:
-		isExternal = _is_external_message(selection, self)
+	# 3. Dane z modelu obiektowego Outlooka (COM) — tylko gdy są potrzebne, gdy wiersz jest
+	# powiązany z fokusem i gdy zaznaczony element odpowiada temu wierszowi.
+	needCom = speakStatuses or (useSounds and any(snap["sounds"].get(k) for k in COM_STATUS_KEYS))
+	selection = None
+	if needCom and related:
+		selection = _get_single_selection(obj)
+		if selection is not None and not _selection_matches_row(selection, rawName, cellTexts):
+			log.debug("outlookSpeechFilter: zaznaczenie COM nie odpowiada wierszowi — pomijam dane COM")
+			selection = None
 
-	# Zbuduj statusy wiersza oraz dźwięki dokładnie według CANONICAL_STATUS_ORDER
-	rowStatuses = []
-	sounds_to_play = []
+	if selection is not None:
+		try:
+			st["unread"] = bool(selection.unread)
+		except (COMError, Exception):
+			pass
+		if not st["flag"]:
+			try:
+				st["flag"] = bool(selection.flagIcon or selection.flagStatus)
+			except (COMError, Exception):
+				pass
+		needInline = speakStatuses or snap["sounds"].get("inline_image", True)
+		realCount, inlineCount = _get_attachment_counts(selection, obj, needInline)
+		st["attachments"] = realCount if realCount > 0 else uiaAttachmentCount
+		st["inline_images"] = inlineCount
+		try:
+			st["importance"] = selection.importance
+		except (COMError, Exception):
+			st["importance"] = 1
+		try:
+			st["meeting"] = (selection.messageClass == "IPM.Schedule.Meeting.Request")
+		except (COMError, Exception):
+			pass
+		try:
+			cat = (selection.categories or "").strip()
+			if cat and cat.lower() not in _NO_CATEGORY_NAMES:
+				st["category"] = True
+				st["category_text"] = _t("STATUS_CATEGORY", cat=cat)
+		except (COMError, Exception):
+			pass
+		if not st["external"]:
+			st["external"] = _is_external_message(selection, obj)
+	else:
+		st["attachments"] = uiaAttachmentCount
 
-	for status_key in CANONICAL_STATUS_ORDER:
-		if status_key == "unread" and unread:
-			rowStatuses.append(_t("STATUS_UNREAD"))
-			if useSounds and soundUnread:
-				sounds_to_play.append("unread")
-		elif status_key == "flag" and hasFlag:
-			rowStatuses.append(_t("STATUS_FLAG"))
-			if useSounds and soundFlags:
-				sounds_to_play.append("flag")
-		elif status_key == "attachment" and realAttCount > 0:
-			rowStatuses.append(_format_attachment_status(realAttCount))
-			if useSounds and soundAttachments:
-				sounds_to_play.append("attachment")
-		elif status_key == "inline_image" and inlineImgCount > 0:
-			rowStatuses.append(_format_inline_images_status(inlineImgCount))
-			if useSounds and soundInlineImages and not _is_image_helper_handling_inline_sounds():
-				sounds_to_play.append("inline_image")
-		elif status_key == "replied" and verbText and verbSound == "replied":
-			rowStatuses.append(verbText)
-			if useSounds and soundReplied:
-				sounds_to_play.append("replied")
-		elif status_key == "forwarded" and verbText and verbSound == "forwarded":
-			rowStatuses.append(verbText)
-			if useSounds and soundForwarded:
-				sounds_to_play.append("forwarded")
-		elif status_key == "importance_high" and importanceText and importanceSound == "importance_high":
-			rowStatuses.append(importanceText)
-			if useSounds and soundImportanceHigh:
-				sounds_to_play.append("importance_high")
-		elif status_key == "importance_low" and importanceText and importanceSound == "importance_low":
-			rowStatuses.append(importanceText)
-			if useSounds and soundImportanceLow:
-				sounds_to_play.append("importance_low")
-		elif status_key == "meeting" and isMeeting:
-			rowStatuses.append(_t("STATUS_MEETING"))
-			if useSounds and soundMeetingRequest:
-				sounds_to_play.append("meeting")
-		elif status_key == "category" and (catText or hasCats):
-			cLabel = catText or _t("STATUS_CATEGORY", cat="")
-			rowStatuses.append(cLabel)
-			if useSounds and soundCategories:
-				sounds_to_play.append("category")
-		elif status_key == "external" and isExternal:
-			rowStatuses.append(_t("STATUS_EXTERNAL"))
-			if useSounds and soundExternal:
-				sounds_to_play.append("external")
+	if uiaUnread is not None:
+		st["unread"] = uiaUnread
 
-	self._osf_statuses = rowStatuses
-	self._omc_statuses = rowStatuses
-	global _last_focused_statuses
-	_last_focused_statuses = rowStatuses
+	items = _build_status_items(st)
+	sounds = _sounds_for_status_items(items, snap)
 
-	# Odtwórz dźwięki statusów w kanonicznej kolejności
-	if sounds_to_play:
-		_schedule_status_sounds(sounds_to_play)
-
-	# Gdy komunikaty mowy są włączone (speakStatuses = True), dodaj statusy na początku tekstu wiersza
-	if speakStatuses and rowStatuses:
-		textList.extend([s + "," for s in rowStatuses])
-
+	# Gdy komunikaty mowy są włączone (filtr wyłączony), statusy są czytane na początku wiersza
+	if speakStatuses and items:
+		textList.extend([text + "," for _key, text in items])
 	textList.extend(contentCells)
+	return (" ".join(textList), items, sounds)
 
-	return " ".join(textList)
+
+def _on_message_row_focus(obj):
+	"""Wywoływane z event_gainFocus wiersza: zapamiętuje statusy i odtwarza dźwięki (wątek główny)."""
+	global _last_focused_statuses
+	_text, items, sounds = _get_row_info(obj)
+	_last_focused_statuses = list(items)
+	if sounds:
+		_schedule_status_sounds(sounds)
+	else:
+		_stop_pending_sounds()
 
 
 def _is_image_helper_handling_inline_sounds() -> bool:
@@ -2497,84 +2999,48 @@ def _is_image_helper_handling_inline_sounds() -> bool:
 		return False
 
 
+class _StatusMaskedItemProxy:
+	"""
+	Pośrednik elementu Outlooka dla oryginalnej funkcji NVDA getReceivedMessageString:
+	ukrywa wyłącznie stan nieprzeczytania i załączniki (wyciszane przez dodatek),
+	zachowując wszystkie pozostałe pola i tłumaczenia NVDA.
+	"""
+
+	class _NoAttachments:
+		count = 0
+		Count = 0
+
+	def __init__(self, item):
+		object.__setattr__(self, "_osfItem", item)
+
+	def __getattr__(self, name):
+		low = name.lower()
+		if low == "unread":
+			return False
+		if low == "attachments":
+			return _StatusMaskedItemProxy._NoAttachments()
+		return getattr(object.__getattribute__(self, "_osfItem"), name)
+
+
 def _custom_getReceivedMessageString(obj):
-	conf = config.conf.get(CONFIG_SECTION, {})
-	enabled = _to_bool(conf.get("enabled", True), default=True)
-	useSounds = _to_bool(conf.get("useSounds", True), default=True)
-	speakStatuses = not enabled
-
-	sounds_to_play = []
-	nameList = []
-	entryID = getattr(obj, "EntryID", None)
-	if entryID and entryID in _msg_attachment_cache:
-		realAttCount, inlineImgCount = _msg_attachment_cache[entryID]
-	else:
-		realAttCount = _get_real_attachments_count(obj)
-		needInline = _to_bool(conf.get("soundInlineImages", conf.get("reportInlineImages", True)), default=True) or speakStatuses
-		inlineImgCount = _get_inline_images_count(obj) if needInline else 0
-		if entryID:
-			if len(_msg_attachment_cache) > 200:
-				_msg_attachment_cache.clear()
-			_msg_attachment_cache[entryID] = (realAttCount, inlineImgCount)
-
-	# Zbuduj statusy wiersza według CANONICAL_STATUS_ORDER
-	soundUnread = _to_bool(conf.get("soundUnread", conf.get("reportUnread", True)), default=True)
-	soundAttachments = _to_bool(conf.get("soundAttachments", conf.get("reportAttachments", True)), default=True)
-	soundInlineImages = _to_bool(conf.get("soundInlineImages", conf.get("reportInlineImages", True)), default=True)
-
-	if getattr(obj, "unread", False):
-		if speakStatuses:
-			nameList.append(_t("STATUS_UNREAD"))
-		if useSounds and soundUnread:
-			sounds_to_play.append("unread")
-
-	if realAttCount > 0:
-		if speakStatuses:
-			nameList.append(_format_attachment_status(realAttCount))
-		if useSounds and soundAttachments:
-			sounds_to_play.append("attachment")
-
-	if inlineImgCount > 0:
-		if speakStatuses:
-			nameList.append(_format_inline_images_status(inlineImgCount))
-		if useSounds and soundInlineImages and not _is_image_helper_handling_inline_sounds():
-			sounds_to_play.append("inline_image")
-
-	sender = ""
+	"""Zastępnik getReceivedMessageString: bez efektów ubocznych, bez zakodowanych na sztywno polskich etykiet."""
+	orig = _original_getReceivedMessageString
+	if orig is None:
+		return ""
+	if not _get_conf_snapshot()["enabled"]:
+		return orig(obj)
 	try:
-		sender = getattr(obj, "senderName", "") or ""
+		return orig(_StatusMaskedItemProxy(obj))
 	except Exception:
-		pass
-	if sender:
-		nameList.append(sender)
-
-	try:
-		subj = getattr(obj, "subject", "") or ""
-		if subj:
-			nameList.append(f"temat: {subj}")
-	except Exception:
-		pass
-
-	try:
-		rec = getattr(obj, "receivedTime", "") or ""
-		if rec:
-			nameList.append(f"odebrano: {rec}")
-	except Exception:
-		pass
-
-	text = ", ".join(nameList)
-
-	if sounds_to_play:
-		_schedule_status_sounds(sounds_to_play)
-
-	return text
+		log.debugWarning("outlookSpeechFilter: getReceivedMessageString przez pośrednika nie powiodło się", exc_info=True)
+		return orig(obj)
 
 
 _saved_class_methods = {}
 
 
 def _safe_patch_method(target_obj, attr_name, new_method):
-	"""Bezpiecznie podmienia metodę klasy, zachowując indywidualny oryginał dla danej klasy/obiektu."""
+	"""Bezpiecznie podmienia atrybut, zachowując indywidualny oryginał dla danego obiektu."""
 	key = (target_obj, attr_name)
 	if key not in _saved_class_methods:
 		orig = getattr(target_obj, attr_name, None)
@@ -2584,7 +3050,13 @@ def _safe_patch_method(target_obj, attr_name, new_method):
 
 
 def patchOutlookClasses():
-	"""Podmienia _get_name oraz getReceivedMessageString na klasach wierszy Outlooka, zachowując oryginalne referencje."""
+	"""
+	Zapamiętuje oryginalny UIAGridRow._get_name (używany jako awaryjna nazwa) i podmienia
+	funkcję modułową getReceivedMessageString.
+	Uwaga: nie podmieniamy już UIAGridRow._get_name na klasie — AutoPropertyType (baseObject)
+	wiąże getter z właściwością „name” w chwili tworzenia klasy, więc taka podmiana nie działała.
+	Filtrowanie zapewnia nakładka CleanOutlookGridRow.
+	"""
 	global _original_UIAGridRow_get_name, _original_getReceivedMessageString, _patches_applied
 	if _patches_applied:
 		return
@@ -2592,50 +3064,52 @@ def patchOutlookClasses():
 	if builtinOutlook and hasattr(builtinOutlook, "UIAGridRow"):
 		if _original_UIAGridRow_get_name is None:
 			_original_UIAGridRow_get_name = builtinOutlook.UIAGridRow._get_name
-		_safe_patch_method(builtinOutlook.UIAGridRow, "_get_name", _custom_UIAGridRow_get_name)
 
-		if hasattr(builtinOutlook, "getReceivedMessageString"):
-			if _original_getReceivedMessageString is None:
-				_original_getReceivedMessageString = builtinOutlook.getReceivedMessageString
-			_safe_patch_method(builtinOutlook, "getReceivedMessageString", _custom_getReceivedMessageString)
-
-	# Bezpieczne sprawdzanie załadowanych modułów w sys.modules
+	appModulePatched = False
 	for modName in list(sys.modules.keys()):
-		if "appModules.outlook" in modName:
+		if modName.endswith("appModules.outlook"):
 			mod = sys.modules.get(modName)
-			if mod:
-				if hasattr(mod, "UIAGridRow"):
-					_safe_patch_method(mod.UIAGridRow, "_get_name", _custom_UIAGridRow_get_name)
-				if hasattr(mod, "UIAGridRowWithReadStatus"):
-					_safe_patch_method(mod.UIAGridRowWithReadStatus, "_get_name", _custom_UIAGridRow_get_name)
+			if mod is None or not hasattr(mod, "getReceivedMessageString"):
+				continue
+			if modName == "appModules.outlook":
+				appModulePatched = True
+			current = getattr(mod, "getReceivedMessageString", None)
+			if current is _custom_getReceivedMessageString:
+				continue
+			if _original_getReceivedMessageString is None:
+				_original_getReceivedMessageString = current
+			_safe_patch_method(mod, "getReceivedMessageString", _custom_getReceivedMessageString)
 
-	_patches_applied = True
+	# Zakończ dopiero, gdy załadowany jest moduł aplikacji Outlooka (appModules.outlook)
+	_patches_applied = appModulePatched
 
 
 class CleanOutlookGridRow(builtinOutlook.UIAGridRow if builtinOutlook else object):
+	"""Nakładka na wiersze listy wiadomości Outlooka (wyłącznie obiekty UIA o klasach wierszy/nagłówków grup)."""
+
 	def _get_name(self):
 		return _custom_UIAGridRow_get_name(self)
 
 	def _get_description(self):
-		rawName = getattr(getattr(self, "UIAElement", None), "cachedName", "") or getattr(getattr(self, "UIAElement", None), "currentName", "") or ""
-		if not rawName and _original_UIAGridRow_get_name:
-			try:
-				rawName = _original_UIAGridRow_get_name(self) or ""
-			except Exception:
-				rawName = ""
-		if rawName and any(k in rawName.lower() for k in ("grupuj według", "group by", "kategorie:", "kategoria:")):
-			return ""
 		try:
 			rawDesc = super().description
-			if rawDesc and any(k in rawDesc.lower() for k in ("grupuj według", "group by")):
-				return ""
-			return rawDesc
 		except Exception:
 			return ""
+		if _uia_class_name(self) in GROUP_HEADER_CLASSES:
+			rawName = _raw_uia_name(self)
+			for txt in (rawName, rawDesc):
+				if txt and any(k in txt.lower() for k in ("grupuj według", "group by", "kategorie:", "kategoria:")):
+					return ""
+		return rawDesc
 
-
-PARENT_SOUNDS_LABEL = _("Odtwarzaj dyskretne dźwięki zamiast wyciszonych komunikatów mowy")
-
+	def event_gainFocus(self):
+		try:
+			_on_message_row_focus(self)
+		except Exception:
+			log.debugWarning("outlookSpeechFilter: błąd obsługi fokusu wiersza", exc_info=True)
+		superHandler = getattr(super(), "event_gainFocus", None)
+		if superHandler:
+			superHandler()
 
 class SettingsPanelTitleDescriptor:
 	"""
@@ -2669,7 +3143,7 @@ class UpdateNotificationDialog(wx.Dialog):
 	def __init__(self, parent, addon_title, local_ver, remote_ver, changelog, on_install_callback):
 		super().__init__(
 			parent,
-			title=f"Aktualizacja: {addon_title}",
+			title=_t("UPD_DLG_TITLE", title=addon_title),
 			style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER
 		)
 		self.on_install_callback = on_install_callback
@@ -2677,37 +3151,37 @@ class UpdateNotificationDialog(wx.Dialog):
 		main_sizer = wx.BoxSizer(wx.VERTICAL)
 
 		# Nagłówek
-		lbl_header = wx.StaticText(self, label=f"Dostępna jest nowa wersja dodatku: {addon_title}!")
+		lbl_header = wx.StaticText(self, label=_t("UPD_HEADER", title=addon_title))
 		font = lbl_header.GetFont()
 		font.SetWeight(wx.FONTWEIGHT_BOLD)
 		lbl_header.SetFont(font)
 		main_sizer.Add(lbl_header, 0, wx.ALL, 12)
 
 		# Informacja o wersjach
-		lbl_ver = wx.StaticText(self, label=f"Zainstalowana wersja: {local_ver}   --->   Nowa wersja: {remote_ver}")
+		lbl_ver = wx.StaticText(self, label=_t("UPD_VERSIONS", local=local_ver, remote=remote_ver))
 		main_sizer.Add(lbl_ver, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
 
 		# Etykieta zmian
-		lbl_changes = wx.StaticText(self, label="&Wykaz nowości i ulepszeń w tej wersji:")
+		lbl_changes = wx.StaticText(self, label=_t("UPD_CHANGES_LABEL"))
 		main_sizer.Add(lbl_changes, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 4)
 
 		# Pole tekstowe z opisem zmian (dostępne, wieloliniowe, tylko do odczytu)
 		self.txt_changelog = wx.TextCtrl(
 			self,
-			value=changelog or "Brak dodatkowego opisu zmian.",
+			value=changelog or _t("UPD_NO_CHANGELOG"),
 			style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL,
 			size=(520, 160)
 		)
 		main_sizer.Add(self.txt_changelog, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 
 		# Komunikat pytający
-		lbl_prompt = wx.StaticText(self, label="Czy chcesz teraz pobrać i zainstalować tę aktualizację?")
+		lbl_prompt = wx.StaticText(self, label=_t("UPD_PROMPT"))
 		main_sizer.Add(lbl_prompt, 0, wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
 
 		# Przyciski akcji
 		btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-		self.btn_install = wx.Button(self, wx.ID_YES, label="&Zaktualizuj teraz")
-		self.btn_cancel = wx.Button(self, wx.ID_CANCEL, label="&Przypomnij później")
+		self.btn_install = wx.Button(self, wx.ID_YES, label=_t("UPD_BTN_INSTALL"))
+		self.btn_cancel = wx.Button(self, wx.ID_CANCEL, label=_t("UPD_BTN_LATER"))
 
 		self.btn_install.Bind(wx.EVT_BUTTON, self.on_install)
 		self.btn_cancel.Bind(wx.EVT_BUTTON, self.on_cancel)
@@ -2731,6 +3205,46 @@ class UpdateNotificationDialog(wx.Dialog):
 		self.EndModal(wx.ID_CANCEL)
 
 
+class UpdateSecurityError(Exception):
+	"""Błąd weryfikacji bezpieczeństwa aktualizacji (adres, suma kontrolna, wersja)."""
+
+
+def _is_allowed_update_url(url: str) -> bool:
+	"""Dozwolone są wyłącznie adresy https:// na hostach GitHub z listy UPDATE_ALLOWED_HOSTS."""
+	try:
+		parts = urllib.parse.urlsplit(str(url or "").strip())
+	except Exception:
+		return False
+	if parts.scheme.lower() != "https":
+		return False
+	host = (parts.hostname or "").lower()
+	return host in UPDATE_ALLOWED_HOSTS
+
+
+class _GitHubOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+	"""Podąża za przekierowaniami tylko wtedy, gdy cel jest również dozwolonym adresem HTTPS GitHub."""
+
+	def redirect_request(self, req, fp, code, msg, headers, newurl):
+		absolute = urllib.parse.urljoin(req.full_url, newurl)
+		if not _is_allowed_update_url(absolute):
+			raise UpdateSecurityError(_t("UPD_ERR_URL", url=absolute))
+		return super().redirect_request(req, fp, code, msg, headers, absolute)
+
+
+def _open_update_url(url: str, timeout: int):
+	"""Otwiera adres HTTPS GitHub, weryfikując adres początkowy, przekierowania i adres końcowy."""
+	if not _is_allowed_update_url(url):
+		raise UpdateSecurityError(_t("UPD_ERR_URL", url=url))
+	opener = urllib.request.build_opener(_GitHubOnlyRedirectHandler())
+	req = urllib.request.Request(url, headers={"User-Agent": "NVDA-Addon-Updater/1.0"})
+	resp = opener.open(req, timeout=timeout)
+	finalUrl = resp.geturl()
+	if not _is_allowed_update_url(finalUrl):
+		resp.close()
+		raise UpdateSecurityError(_t("UPD_ERR_URL", url=finalUrl))
+	return resp
+
+
 class AddonUpdaterEngine:
 	def __init__(self, addon_name: str, addon_title: str, current_version: str, addon_dir: str, config_section: str):
 		self.addon_name = addon_name
@@ -2740,89 +3254,88 @@ class AddonUpdaterEngine:
 		self.config_section = config_section
 
 	def get_configured_source(self) -> str:
-		conf = config.conf.get(self.config_section, {})
-		src = str(conf.get("updateSourceUrl", DEFAULT_UPDATE_SOURCE_URL)).strip()
-		if not src or "mój dysk" in src.lower() or "moj dysk" in src.lower() or src.endswith("updates.json"):
+		"""Adres źródła z konfiguracji — akceptowany tylko, jeśli jest dozwolonym adresem HTTPS GitHub."""
+		try:
+			src = str(config.conf.get(self.config_section, {}).get("updateSourceUrl", DEFAULT_UPDATE_SOURCE_URL)).strip()
+		except Exception:
+			src = ""
+		if not src or not _is_allowed_update_url(src):
 			return DEFAULT_UPDATE_SOURCE_URL
 		return src
 
 	def fetch_manifest(self) -> tuple[dict | None, str | None]:
-		configured = self.get_configured_source()
+		"""Pobiera informację o aktualizacji wyłącznie z HTTPS GitHub (bez plików lokalnych)."""
 		candidates = []
-		if configured:
-			candidates.append(configured.strip())
-		candidates.extend([
-			DEFAULT_UPDATE_SOURCE_URL,
-			"https://raw.githubusercontent.com/strugo10/outlookSpeechFilter/main/updates.json",
-			os.path.join(self.addon_dir, "update_info.json"),
-			os.path.join(self.addon_dir, "updates.json"),
-		])
+		for s in (self.get_configured_source(), DEFAULT_UPDATE_SOURCE_URL, SECONDARY_UPDATE_SOURCE_URL):
+			if s and s not in candidates:
+				candidates.append(s)
 
 		raw_content = None
 		resolved_source = None
 		last_err = None
 
 		for s in candidates:
-			if not s:
-				continue
 			try:
-				if s.startswith("http://") or s.startswith("https://"):
-					req = urllib.request.Request(s, headers={"User-Agent": "NVDA-Addon-Updater/1.0"})
-					with urllib.request.urlopen(req, timeout=10) as resp:
-						raw_content = resp.read().decode("utf-8-sig")
-						resolved_source = s
-						break
-				elif os.path.isfile(s):
-					with open(s, "r", encoding="utf-8-sig") as f:
-						raw_content = f.read()
-						resolved_source = s
-						break
+				with _open_update_url(s, timeout=10) as resp:
+					raw_content = resp.read(1024 * 1024).decode("utf-8-sig")
+					resolved_source = s
+					break
 			except Exception as ex:
 				last_err = ex
 				continue
 
 		if not raw_content:
-			return None, str(last_err or "Nie udało się połączyć z serwerem aktualizacji GitHub ani odczytać pliku ogłoszeniowego.")
+			return None, _t("UPD_ERR_NETWORK", err=last_err or "")
 
 		try:
 			data = json.loads(raw_content)
-			if self.addon_name in data and isinstance(data[self.addon_name], dict):
-				item = data[self.addon_name]
+			if isinstance(data, dict) and isinstance(data.get(self.addon_name), dict):
+				item = dict(data[self.addon_name])
 			elif isinstance(data, dict) and "version" in data:
-				item = data
+				item = dict(data)
 			else:
-				return None, f"Brak wpisu dla dodatku '{self.addon_name}' w pliku ogłoszeniowym."
+				return None, _t("UPD_ERR_NO_ENTRY", name=self.addon_name)
 
 			item["_source"] = resolved_source
 			return item, None
 		except Exception as ex:
-			return None, f"Błąd przetwarzania formatu JSON: {ex}"
+			return None, _t("UPD_ERR_JSON", err=ex)
 
 	def check_for_updates(self, manual: bool = False):
 		t = threading.Thread(target=self._worker_check, args=(manual,), daemon=True)
 		t.start()
+
+	def _record_successful_check(self):
+		"""Zapisuje czas udanego sprawdzenia (w wątku głównym)."""
+		def _set():
+			try:
+				config.conf[self.config_section]["lastUpdateCheckTime"] = time.time()
+			except Exception:
+				pass
+		wx.CallAfter(_set)
 
 	def _worker_check(self, manual: bool):
 		try:
 			info, err = self.fetch_manifest()
 			if not info:
 				if manual:
-					msg = f"Nie udało się sprawdzić aktualizacji dla dodatku {self.addon_title}.\n\nSzczegóły: {err}"
-					wx.CallAfter(gui.messageBox, msg, f"Aktualizacje: {self.addon_title}", wx.OK | wx.ICON_WARNING)
+					wx.CallAfter(
+						showAccessibleMessageBox,
+						_t("UPD_CHECK_FAILED", title=self.addon_title, err=err),
+						_t("UPD_TITLE", title=self.addon_title),
+					)
 				return
 
+			self._record_successful_check()
 			remote_ver = str(info.get("version", "")).strip()
 			if _is_newer(remote_ver, self.current_version):
-				try:
-					config.conf[self.config_section]["lastUpdateCheckTime"] = time.time()
-				except Exception:
-					pass
-				download_url = info.get("downloadUrl", "")
+				download_url = str(info.get("downloadUrl", "") or "")
 				changelog = info.get("changelog", "")
+				expected_sha = str(info.get("sha256", "") or "").strip().lower()
 
 				def _show_dialog():
 					def _on_confirm():
-						self.perform_update(download_url)
+						self.perform_update(download_url, expected_sha)
 					dlg = UpdateNotificationDialog(
 						parent=gui.mainFrame,
 						addon_title=self.addon_title,
@@ -2832,52 +3345,80 @@ class AddonUpdaterEngine:
 						on_install_callback=_on_confirm
 					)
 					gui.mainFrame.prePopup()
-					dlg.ShowModal()
-					dlg.Destroy()
-					gui.mainFrame.postPopup()
+					try:
+						dlg.ShowModal()
+					finally:
+						dlg.Destroy()
+						gui.mainFrame.postPopup()
 
 				wx.CallAfter(_show_dialog)
 			else:
 				if manual:
-					msg = f"Posiadasz najnowszą wersję dodatku {self.addon_title} ({self.current_version}).\nBrak nowszych aktualizacji w serwisie GitHub."
-					wx.CallAfter(gui.messageBox, msg, f"Aktualizacje: {self.addon_title}", wx.OK | wx.ICON_INFORMATION)
+					wx.CallAfter(
+						showAccessibleMessageBox,
+						_t("UPD_UP_TO_DATE", title=self.addon_title, ver=self.current_version),
+						_t("UPD_TITLE", title=self.addon_title),
+					)
 		except Exception as ex:
+			log.debugWarning(f"{self.addon_name} updater check error: {ex}", exc_info=True)
 			if manual:
-				wx.CallAfter(gui.messageBox, f"Wystąpił nieoczekiwany błąd podczas sprawdzania aktualizacji:\n{ex}", f"Błąd: {self.addon_title}", wx.OK | wx.ICON_ERROR)
+				wx.CallAfter(
+					showAccessibleMessageBox,
+					_t("UPD_UNEXPECTED_ERROR", err=ex),
+					_t("UPD_ERROR_TITLE", title=self.addon_title),
+				)
 
-	def perform_update(self, download_url: str):
-		t = threading.Thread(target=self._worker_download_install, args=(download_url,), daemon=True)
+	def perform_update(self, download_url: str, expected_sha: str = ""):
+		t = threading.Thread(target=self._worker_download_install, args=(download_url, expected_sha), daemon=True)
 		t.start()
 
-	def _worker_download_install(self, download_url: str):
+	def _download_package(self, download_url: str, expected_sha: str) -> str:
+		"""Pobiera pakiet z HTTPS GitHub do pliku tymczasowego i weryfikuje sumę SHA-256."""
+		if not re.fullmatch(r"[0-9a-f]{64}", expected_sha or ""):
+			raise UpdateSecurityError(_t("UPD_ERR_NO_SHA"))
+		fd, tmp_file = tempfile.mkstemp(prefix=f"{self.addon_name}_update_", suffix=".nvda-addon")
+		os.close(fd)
+		hasher = hashlib.sha256()
+		total = 0
+		try:
+			with _open_update_url(download_url, timeout=30) as resp, open(tmp_file, "wb") as out:
+				while True:
+					chunk = resp.read(64 * 1024)
+					if not chunk:
+						break
+					total += len(chunk)
+					if total > UPDATE_MAX_PACKAGE_SIZE:
+						raise UpdateSecurityError(_t("UPD_ERR_TOO_BIG"))
+					hasher.update(chunk)
+					out.write(chunk)
+			if hasher.hexdigest().lower() != expected_sha:
+				raise UpdateSecurityError(_t("UPD_ERR_SHA_MISMATCH"))
+			return tmp_file
+		except Exception:
+			try:
+				os.remove(tmp_file)
+			except Exception:
+				pass
+			raise
+
+	def _worker_download_install(self, download_url: str, expected_sha: str = ""):
 		import addonHandler
 
-		wx.CallAfter(ui.message, f"Pobieranie aktualizacji dla {self.addon_title} z serwisu GitHub...")
+		wx.CallAfter(ui.message, _t("UPD_DOWNLOADING", title=self.addon_title))
 		target_pkg = None
-		is_temp_pkg = False
 
 		try:
-			if download_url.startswith("http://") or download_url.startswith("https://"):
-				req = urllib.request.Request(download_url, headers={"User-Agent": "NVDA-Addon-Updater/1.0"})
-				tmp_file = os.path.join(tempfile.gettempdir(), f"{self.addon_name}_update.nvda-addon")
-				with urllib.request.urlopen(req, timeout=30) as resp, open(tmp_file, "wb") as out:
-					shutil.copyfileobj(resp, out)
-				target_pkg = tmp_file
-				is_temp_pkg = True
-			else:
-				if os.path.isfile(download_url):
-					target_pkg = download_url
-
-			if not target_pkg or not os.path.isfile(target_pkg):
-				raise FileNotFoundError(f"Nie znaleziono pliku instalacyjnego dodatku:\n{download_url}")
+			target_pkg = self._download_package(download_url, expected_sha)
 
 			bundle = addonHandler.AddonBundle(target_pkg)
 			manifest_name = str(bundle.manifest.get("name") or "").strip()
 			manifest_ver = str(bundle.manifest.get("version") or "").strip()
 			if not manifest_name or not manifest_ver:
-				raise ValueError("Pobrany pakiet nie zawiera prawidłowego pliku manifest.ini.")
+				raise ValueError(_t("UPD_ERR_MANIFEST"))
 			if manifest_name != self.addon_name:
-				raise ValueError(f"Niezgodna nazwa dodatku w pakiecie: oczekiwano '{self.addon_name}', otrzymano '{manifest_name}'.")
+				raise ValueError(_t("UPD_ERR_NAME", expected=self.addon_name, got=manifest_name))
+			if not _is_newer(manifest_ver, self.current_version):
+				raise UpdateSecurityError(_t("UPD_ERR_NOT_NEWER", ver=manifest_ver, cur=self.current_version))
 
 			def _do_install():
 				installed_ok = False
@@ -2886,10 +3427,21 @@ class AddonUpdaterEngine:
 					try:
 						import addonHandler.addonVersionCheck as avc
 						if hasattr(avc, "isAddonCompatible") and not avc.isAddonCompatible(bundle):
-							if getattr(bundle, "canOverrideCompatibility", False):
-								bundle.enableCompatibilityOverride()
+							canOverride = getattr(bundle, "canOverrideCompatibility", False)
+							if callable(canOverride):
+								canOverride = canOverride()
+							if canOverride and hasattr(bundle, "enableCompatibilityOverride"):
+								# Zamiast cichego obejścia zgodności — pytanie do użytkownika
+								if showAccessibleConfirmBox(
+									_t("UPD_OVERRIDE_CONFIRM", title=self.addon_title, ver=manifest_ver),
+									_t("UPD_OVERRIDE_TITLE"),
+									defaultYes=False,
+								):
+									bundle.enableCompatibilityOverride()
+								else:
+									raise RuntimeError(_t("UPD_OVERRIDE_DECLINED"))
 							else:
-								raise RuntimeError("Pobrana wersja dodatku nie jest kompatybilna z bieżącą wersją NVDA.")
+								raise RuntimeError(_t("UPD_INCOMPATIBLE"))
 					except ImportError:
 						pass
 
@@ -2937,41 +3489,44 @@ class AddonUpdaterEngine:
 						if install_exceptions:
 							install_err_msg = "; ".join(str(e) for e in install_exceptions)
 						else:
-							install_err_msg = "Funkcja installAddonBundle zwróciła wartość None."
+							install_err_msg = _t("UPD_INSTALL_RETURNED_NONE")
 				except Exception as ex:
 					install_err_msg = str(ex)
 					log.error(f"{self.addon_name} updater internal install error: {ex}", exc_info=True)
 				finally:
-					if is_temp_pkg and target_pkg and os.path.isfile(target_pkg):
+					if target_pkg and os.path.isfile(target_pkg):
 						try:
 							os.remove(target_pkg)
 						except Exception:
 							pass
 
 				if installed_ok:
-					ver_text = f" do wersji {manifest_ver}" if manifest_ver else ""
-					if gui.messageBox(
-						f"Pomyślnie zaktualizowano dodatek {self.addon_title}{ver_text}.\n\nCzy chcesz teraz zrestartować NVDA, aby zastosować zmiany?",
-						"Aktualizacja zakończona sukcesem",
-						wx.YES_NO | wx.ICON_QUESTION
-					) == wx.YES:
+					if showAccessibleConfirmBox(
+						_t("UPD_SUCCESS", title=self.addon_title, ver=manifest_ver),
+						_t("UPD_SUCCESS_TITLE"),
+						defaultYes=True,
+					):
 						core.restart()
 					return
 
-				gui.messageBox(
-					f"Nie udało się zainstalować aktualizacji dodatku {self.addon_title}.\n\nSzczegóły błędu:\n{install_err_msg or 'Nieznany błąd instalacji pakietu.'}",
-					f"Błąd instalacji: {self.addon_title}",
-					wx.OK | wx.ICON_ERROR
+				showAccessibleMessageBox(
+					_t("UPD_INSTALL_FAILED", title=self.addon_title, err=install_err_msg or _t("UPD_UNKNOWN_INSTALL_ERROR")),
+					_t("UPD_INSTALL_FAILED_TITLE", title=self.addon_title),
 				)
 
 			wx.CallAfter(_do_install)
 		except Exception as ex:
-			if is_temp_pkg and target_pkg and os.path.isfile(target_pkg):
+			if target_pkg and os.path.isfile(target_pkg):
 				try:
 					os.remove(target_pkg)
 				except Exception:
 					pass
-			wx.CallAfter(gui.messageBox, f"Nie udało się pobrać lub zweryfikować aktualizacji:\n{ex}", f"Błąd aktualizacji: {self.addon_title}", wx.OK | wx.ICON_ERROR)
+			log.warning(f"{self.addon_name} updater: {ex}")
+			wx.CallAfter(
+				showAccessibleMessageBox,
+				_t("UPD_DOWNLOAD_FAILED", err=ex),
+				_t("UPD_DOWNLOAD_FAILED_TITLE", title=self.addon_title),
+			)
 
 
 class ShareAddonDialog(wx.Dialog):
@@ -3310,10 +3865,10 @@ class SoundCustomizationDialog(wx.Dialog):
 			self._updateSliderValue(currentVal - 1)
 			return
 		elif keyCode in (wx.WXK_HOME, getattr(wx, "WXK_NUMPAD_HOME", -1)):
-			self._updateSliderValue(100)
+			self._updateSliderValue(0)
 			return
 		elif keyCode in (wx.WXK_END, getattr(wx, "WXK_NUMPAD_END", -1)):
-			self._updateSliderValue(0)
+			self._updateSliderValue(100)
 			return
 		evt.Skip()
 
@@ -3387,7 +3942,7 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 			self._makeSettingsInternal(settingsSizer)
 		except Exception as e:
 			log.error(f"outlookSpeechFilter: Błąd podczas budowania panelu ustawień: {e}", exc_info=True)
-			errLabel = wx.StaticText(self, label=f"Wystąpił błąd podczas ładowania panelu ustawień Outlook Speech Filter: {e}")
+			errLabel = wx.StaticText(self, label=_t("SETTINGS_LOAD_ERROR", err=e))
 			settingsSizer.Add(errLabel, flag=wx.ALL, border=15)
 
 	def _makeSettingsInternal(self, settingsSizer):
@@ -3455,12 +4010,12 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 		# 4. Sekcja aktualizacji (automatyczne sprawdzanie i przycisk na żądanie)
 		settingsSizer.AddSpacer(6)
 		self.chkAutoUpdates = sHelper.addItem(
-			wx.CheckBox(self, label="&Automatycznie sprawdzaj dostępność aktualizacji przy uruchomieniu NVDA")
+			wx.CheckBox(self, label=_t("AUTO_UPDATES_CB"))
 		)
 		self.chkAutoUpdates.SetValue(_to_bool(conf.get("autoCheckUpdates", True), default=True))
 
 		updBtnBox = wx.BoxSizer(wx.HORIZONTAL)
-		self.checkUpdatesBtn = wx.Button(self, label="&Sprawdź dostępność aktualizacji teraz")
+		self.checkUpdatesBtn = wx.Button(self, label=_t("CHECK_UPDATES_BTN"))
 		self.checkUpdatesBtn.Bind(wx.EVT_BUTTON, self.onCheckUpdatesNow)
 		updBtnBox.Add(self.checkUpdatesBtn, flag=wx.ALIGN_CENTER_VERTICAL)
 		sHelper.addItem(updBtnBox)
@@ -3648,6 +4203,10 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 			self.threadNavCB.SetLabel(_t("ENABLE_THREAD_NAV"))
 		if hasattr(self, "btnCustomizeSounds") and self.btnCustomizeSounds:
 			self.btnCustomizeSounds.SetLabel(_t("CUSTOMIZE_SOUNDS_BTN"))
+		if hasattr(self, "chkAutoUpdates") and self.chkAutoUpdates:
+			self.chkAutoUpdates.SetLabel(_t("AUTO_UPDATES_CB"))
+		if hasattr(self, "checkUpdatesBtn") and self.checkUpdatesBtn:
+			self.checkUpdatesBtn.SetLabel(_t("CHECK_UPDATES_BTN"))
 
 		self.updateParentSoundsLabel()
 
@@ -3705,12 +4264,8 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 	def onLanguageChanged(self, evt):
 		idx = self.languageChoice.GetSelection()
 		if 0 <= idx < len(self.langKeys):
-			newKey = self.langKeys[idx]
-			config.conf[CONFIG_SECTION]["language"] = newKey
-			try:
-				config.conf.save()
-			except Exception as e:
-				log.warning(f"outlookSpeechFilter: Błąd zapisu konfiguracji przy zmianie języka: {e}")
+			# Podgląd języka na żywo (get_effective_language czyta wybór z panelu);
+			# zapis do konfiguracji następuje dopiero w onSave, Anuluj przywraca poprzedni język.
 			self.updateUILabels()
 			chosenName = self.languageChoice.GetString(idx)
 			msg = _t("LANG_CHANGED", lang=chosenName)
@@ -3755,28 +4310,22 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 		):
 			return
 
+		# Przywracane są wyłącznie kontrolki i stan panelu — zapis nastąpi w onSave (OK/Zastosuj),
+		# a Anuluj pozostawia konfigurację bez zmian.
 		# 0. Język
 		if hasattr(self, "languageChoice"):
 			self.languageChoice.SetSelection(0)
-		try:
-			config.conf[CONFIG_SECTION]["language"] = "auto"
-		except Exception:
-			pass
 
 		# 0b. Motyw dźwięków i głośność
 		self.soundTheme = "associative"
 		self.soundVolume = 80
-		try:
-			config.conf[CONFIG_SECTION]["soundTheme"] = "associative"
-			config.conf[CONFIG_SECTION]["soundVolume"] = 80
-			config.conf[CONFIG_SECTION]["updateSourceUrl"] = DEFAULT_UPDATE_SOURCE_URL
-		except Exception:
-			pass
 
 		# 1. Główne przełączniki
 		self.enabledCB.SetValue(True)
 		if hasattr(self, "threadNavCB") and self.threadNavCB:
 			self.threadNavCB.SetValue(True)
+		if hasattr(self, "chkAutoUpdates") and self.chkAutoUpdates:
+			self.chkAutoUpdates.SetValue(True)
 
 		# 2. Poszczególne dźwięki według oficjalnych ustawień domyślnych
 		self.soundStates = {
@@ -3798,26 +4347,13 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 		self.updateParentSoundsLabel()
 		self.updateUILabels()
 		self.Layout()
-		try:
-			config.conf.save()
-		except Exception as e:
-			log.warning(f"outlookSpeechFilter: Błąd zapisu konfiguracji w onRestoreDefaults: {e}")
 
 		ui.message(_t("DEFAULTS_RESTORED"))
 
 	def onDiscard(self):
-		"""W razie anulowania okna dialogowego przywraca pierwotną głośność i język."""
+		"""Anulowanie: panel niczego nie zapisał do konfiguracji przed onSave, więc wystarczy zwolnić referencję."""
 		global _activeSettingsPanelRef
 		_activeSettingsPanelRef = None
-		try:
-			if hasattr(self, "initialSoundVolume"):
-				config.conf[CONFIG_SECTION]["soundVolume"] = _to_int(self.initialSoundVolume, 80)
-			if hasattr(self, "initialLanguage"):
-				config.conf[CONFIG_SECTION]["language"] = str(self.initialLanguage)
-			if hasattr(self, "initialSoundTheme"):
-				config.conf[CONFIG_SECTION]["soundTheme"] = str(self.initialSoundTheme)
-		except Exception as e:
-			log.warning(f"outlookSpeechFilter: Błąd w onDiscard: {e}")
 
 	def onSave(self):
 		conf = config.conf[CONFIG_SECTION]
@@ -3848,17 +4384,14 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 			if hasattr(self, "chkAutoUpdates") and self.chkAutoUpdates:
 				conf["autoCheckUpdates"] = bool(self.chkAutoUpdates.GetValue())
 
-			# Zapewnij zawsze poprawny produkcyjny adres GitHub (oczyszczanie ewentualnych ścieżek lokalnych)
-			curUpd = str(conf.get("updateSourceUrl", "")).strip()
-			if not curUpd or "mój dysk" in curUpd.lower() or "moj dysk" in curUpd.lower() or curUpd.endswith("updates.json"):
-				conf["updateSourceUrl"] = DEFAULT_UPDATE_SOURCE_URL
-
 			# Synchronize legacy keys
 			conf["soundForwardReply"] = bool(self.soundStates.get("soundReplied", False) or self.soundStates.get("soundForwarded", False))
 			conf["soundImportance"] = bool(self.soundStates.get("soundImportanceHigh", True) or self.soundStates.get("soundImportanceLow", False))
 			conf["reportForwardReply"] = bool(conf["soundForwardReply"])
 			conf["reportImportance"] = bool(conf["soundImportance"])
 
+			_invalidate_conf_snapshot()
+			_refresh_script_descriptions()
 			self.updateUILabels()
 			try:
 				config.conf.save()
@@ -3869,95 +4402,6 @@ class OutlookSpeechFilterSettingsPanel(SettingsPanel):
 
 
 OutlookMessageCleanerSettingsPanel = OutlookSpeechFilterSettingsPanel
-
-
-def _neutralize_legacy_addon():
-	"""
-	Bezpieczna i nieinwazyjna obsługa ewentualnej zdublowanej kategorii ustawień.
-	Nie kasuje plików w tle ani nie modyfikuje modułów systemowych podczas startu.
-	Usunięcie starego dodatku jest delegowane do standardowego mechanizmu addonHandler.
-	"""
-	try:
-		categoryClasses = getattr(gui.settingsDialogs.NVDASettingsDialog, "categoryClasses", None)
-		if categoryClasses:
-			for catCls in list(categoryClasses):
-				if catCls is OutlookSpeechFilterSettingsPanel:
-					continue
-				clsName = getattr(catCls, "__name__", "")
-				modName = getattr(catCls, "__module__", "")
-				title = getattr(catCls, "title", "")
-				if (
-					"OutlookMessageCleaner" in clsName
-					or "outlookMessageCleaner" in modName
-					or title in ("Outlook - Wyciszanie informacji", "Outlook Message Cleaner")
-				):
-					try:
-						categoryClasses.remove(catCls)
-						log.info(f"outlookSpeechFilter: Usunięto zdublowaną kategorię ustawień: {clsName}")
-					except Exception:
-						pass
-	except Exception as e:
-		log.debug(f"outlookSpeechFilter: Sprawdzanie kategorii dialogu: {e}")
-
-
-_original_popupSettingsDialog = None
-
-
-def _safe_popupSettingsDialog(dialog, *args, **kwargs):
-	"""
-	Bezpieczny wrapper dla gui.popupSettingsDialog kompatybilny z wieloma wersjami NVDA.
-	Zapobiega błędowi RuntimeError: Cannot open new settings dialog while instance still exists.
-	"""
-	global _original_popupSettingsDialog
-	try:
-		inst = getattr(dialog, "_instance", None)
-		if inst is not None:
-			try:
-				if isinstance(inst, wx.Window) and inst and inst.IsShown():
-					inst.Raise()
-					inst.SetFocus()
-					return
-				else:
-					dialog._instance = None
-					try:
-						inst.Destroy()
-					except Exception:
-						pass
-			except Exception:
-				dialog._instance = None
-	except Exception:
-		pass
-
-	try:
-		instances = getattr(dialog, "_instances", None)
-		if isinstance(instances, (dict, list, set)):
-			to_remove = []
-			for it in list(instances):
-				w = instances[it] if isinstance(instances, dict) else it
-				if not (isinstance(w, wx.Window) and w and w.IsShown()):
-					to_remove.append(it)
-			for it in to_remove:
-				try:
-					if isinstance(instances, dict):
-						del instances[it]
-					else:
-						instances.remove(it)
-				except Exception:
-					pass
-	except Exception:
-		pass
-
-	if _original_popupSettingsDialog:
-		try:
-			return _original_popupSettingsDialog(dialog, *args, **kwargs)
-		except RuntimeError:
-			try:
-				dialog._instance = None
-				return _original_popupSettingsDialog(dialog, *args, **kwargs)
-			except Exception as e:
-				log.warning(f"outlookSpeechFilter: Nie udało się otworzyć okna ustawień po resecie _instance: {e}")
-				return None
-	return None
 
 
 # ==============================================================================
@@ -3972,20 +4416,22 @@ def _getWordDocumentFromHwnd(hwnd: int):
 		import winUser
 		if not winUser.isWindow(hwnd):
 			return None
-		import comtypes.client
+		import comtypes.client.dynamic
 		from comtypes.automation import IDispatch
-		from ctypes import POINTER, byref, c_void_p, oledll
+		from ctypes import POINTER, byref
 
-		pUnknown = POINTER(c_void_p)()
-		hr = oledll.oleacc.AccessibleObjectFromWindow(
-			hwnd,
-			-16,  # OBJID_NATIVEOM
+		# Tak samo jak NVDA (NVDAObjects.window.winword.WordDocument.WinwordWindowObject):
+		# wskaźnik IDispatch z OBJID_NATIVEOM opakowany przez comtypes.client.dynamic.Dispatch
+		pDispatch = POINTER(IDispatch)()
+		hr = ctypes.windll.oleacc.AccessibleObjectFromWindow(
+			wintypes.HWND(hwnd),
+			ctypes.c_long(getattr(winUser, "OBJID_NATIVEOM", -16)),
 			byref(IDispatch._iid_),
-			byref(pUnknown),
+			byref(pDispatch),
 		)
-		if hr == 0 and pUnknown:
-			disp = comtypes.client.wrap(pUnknown)
-			return getattr(disp, "Document", None)
+		if hr == 0 and pDispatch:
+			windowObject = comtypes.client.dynamic.Dispatch(pDispatch)
+			return getattr(windowObject, "Document", None)
 	except Exception as e:
 		log.debug(f"outlookSpeechFilter: _getWordDocumentFromHwnd error: {e}")
 	return None
@@ -4008,8 +4454,10 @@ def _findWordGWindow(parentHwnd: int) -> int:
 				pass
 			return True
 
-		WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
-		ctypes.windll.user32.EnumChildWindows(parentHwnd, WNDENUMPROC(enumChild), 0)
+		# Typy zgodne z 64-bitowym Windows: BOOL CALLBACK EnumChildProc(HWND, LPARAM)
+		WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+		callback = WNDENUMPROC(enumChild)
+		ctypes.windll.user32.EnumChildWindows(wintypes.HWND(parentHwnd), callback, wintypes.LPARAM(0))
 	except Exception:
 		pass
 	return found[0]
@@ -4097,15 +4545,35 @@ def getWordCaretPosition(doc) -> int:
 	"""Zwraca pozycję znaku kursora (caret) w aktywnym dokumencie Word."""
 	if not doc:
 		return 0
+	sel = _getDocumentSelection(doc)
+	if sel is not None:
+		try:
+			return int(sel.Range.Start)
+		except Exception:
+			pass
+	return 0
+
+
+def _getDocumentSelection(doc):
+	"""
+	Zaznaczenie w oknie danego dokumentu (doc.ActiveWindow.Selection), a nie globalne
+	Application.Selection, które może należeć do innego okna Worda/Outlooka.
+	"""
 	try:
-		app = getattr(doc, "Application", None)
-		if app:
-			sel = getattr(app, "Selection", None)
-			if sel:
-				return int(getattr(sel.Range, "Start", 0))
+		win = getattr(doc, "ActiveWindow", None)
+		if win is not None:
+			sel = getattr(win, "Selection", None)
+			if sel is not None:
+				return sel
 	except Exception:
 		pass
-	return 0
+	try:
+		app = getattr(doc, "Application", None)
+		if app is not None:
+			return getattr(app, "Selection", None)
+	except Exception:
+		pass
+	return None
 
 
 def selectWordRange(doc, char_start: int) -> bool:
@@ -4115,11 +4583,9 @@ def selectWordRange(doc, char_start: int) -> bool:
 	try:
 		target_rng = doc.Range(char_start, char_start)
 		target_rng.Select()
-		app = getattr(doc, "Application", None)
-		if app:
-			sel = getattr(app, "Selection", None)
-			if sel:
-				sel.Collapse(1)  # wdCollapseStart = 1
+		sel = _getDocumentSelection(doc)
+		if sel is not None:
+			sel.Collapse(1)  # wdCollapseStart = 1
 		try:
 			active_win = getattr(doc, "ActiveWindow", None)
 			if active_win:
@@ -4222,6 +4688,35 @@ def resolveMessageRangeInWord(doc, msg) -> int:
 		log.debug(f"outlookSpeechFilter: resolveMessageRangeInWord błąd: {ex}")
 
 	return getattr(msg, "range_start", 0)
+
+
+def resolveMessageBodyRangeInWord(doc, msgs: list, msg) -> tuple:
+	"""
+	Zwraca (start, koniec) treści wiadomości (bez nagłówka) w rzeczywistych pozycjach Worda,
+	wyznaczonych tak samo jak przy skokach (resolveMessageRangeInWord), zamiast surowych
+	przesunięć z tekstu doc.Content.Text (które dryfują przy tabelach, obrazkach i polach).
+	"""
+	start = resolveMessageRangeInWord(doc, msg)
+	headerLen = 0
+	if getattr(msg, "header_end", 0) > 0:
+		headerLen = max(0, msg.header_end - msg.range_start)
+	bodyStart = start + headerLen
+	end = None
+	try:
+		ordered = sorted(msgs, key=lambda m: m.range_start)
+		pos = ordered.index(msg)
+		if pos + 1 < len(ordered):
+			end = resolveMessageRangeInWord(doc, ordered[pos + 1])
+	except Exception:
+		end = None
+	if end is None:
+		try:
+			end = int(doc.Content.End)
+		except Exception:
+			end = msg.range_end
+	if end <= bodyStart:
+		return (msg.header_end if msg.header_end > 0 else msg.range_start), msg.range_end
+	return bodyStart, end
 
 
 class ThreadMessage:
@@ -4496,6 +4991,7 @@ class EmailThreadDialog(wx.Dialog):
 		self.on_select_callback = on_select_callback
 		self.doc = doc
 		self.filtered_messages = list(messages)
+		self._filterAnnounceTimer = None
 
 		self.SetSize((760, 560))
 		self.SetMinSize((520, 380))
@@ -4576,10 +5072,25 @@ class EmailThreadDialog(wx.Dialog):
 					target_idx = idx
 					break
 			self.listCtrl.SetSelection(target_idx)
-			wx.CallLater(150, self._speak_current_selection)
+		# Bez dodatkowego ui.message — NVDA samo odczytuje zaznaczony element listy
 
 	def onFilterChange(self, event):
 		self.populateList(self.txtFilter.GetValue())
+		# Po filtrowaniu (z opóźnieniem, by nie przerywać pisania) podaj liczbę wyników
+		try:
+			if self._filterAnnounceTimer is not None:
+				self._filterAnnounceTimer.Stop()
+		except Exception:
+			pass
+		self._filterAnnounceTimer = wx.CallLater(700, self._announceFilterResults)
+
+	def _announceFilterResults(self):
+		self._filterAnnounceTimer = None
+		try:
+			if self.txtFilter.HasFocus():
+				ui.message(_t("THREAD_FILTER_RESULTS", count=len(self.filtered_messages)))
+		except Exception:
+			pass
 
 	def onFilterKeyDown(self, event):
 		if event.GetKeyCode() == wx.WXK_DOWN:
@@ -4588,17 +5099,7 @@ class EmailThreadDialog(wx.Dialog):
 		event.Skip()
 
 	def onSelectionChange(self, event):
-		self._speak_current_selection()
 		event.Skip()
-
-	def _speak_current_selection(self):
-		try:
-			sel = self.listCtrl.GetSelection()
-			if sel != wx.NOT_FOUND and sel < len(self.filtered_messages):
-				msg = self.filtered_messages[sel]
-				ui.message(msg.display_label)
-		except Exception:
-			pass
 
 	def onEnter(self, event):
 		self.onOk(event)
@@ -4633,8 +5134,7 @@ class EmailThreadDialog(wx.Dialog):
 		copied_text = ""
 		if self.doc:
 			try:
-				start_c = target_m.header_end if target_m.header_end > 0 else target_m.range_start
-				end_c = target_m.range_end
+				start_c, end_c = resolveMessageBodyRangeInWord(self.doc, self.messages, target_m)
 				rng = self.doc.Range(start_c, end_c)
 				copied_text = str(getattr(rng, "Text", "") or "").strip()
 			except Exception as ex:
@@ -4665,92 +5165,9 @@ class EmailThreadDialog(wx.Dialog):
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	scriptCategory = SettingsPanelTitleDescriptor()
 
-	__gestures = {
-		# Przełącznik wyciszania mowy (NVDA+Ctrl+Shift+O oraz Insert+Ctrl+Shift+O we wszystkich kolejnościach klawiszy)
-		"kb:NVDA+control+shift+o": "toggleOutlookCleaner",
-		"kb:control+shift+NVDA+o": "toggleOutlookCleaner",
-		"kb:insert+control+shift+o": "toggleOutlookCleaner",
-		"kb:control+shift+insert+o": "toggleOutlookCleaner",
-		"kb:NVDA+shift+control+o": "toggleOutlookCleaner",
-		"kb:shift+control+NVDA+o": "toggleOutlookCleaner",
-		"kb:insert+shift+control+o": "toggleOutlookCleaner",
-		"kb:shift+control+insert+o": "toggleOutlookCleaner",
-
-		# Przełącznik dźwięków (NVDA+Ctrl+Shift+S oraz Insert+Ctrl+Shift+S)
-		"kb:NVDA+control+shift+s": "toggleSounds",
-		"kb:control+shift+NVDA+s": "toggleSounds",
-		"kb:insert+control+shift+s": "toggleSounds",
-		"kb:control+shift+insert+s": "toggleSounds",
-		"kb:NVDA+shift+control+s": "toggleSounds",
-		"kb:shift+control+NVDA+s": "toggleSounds",
-		"kb:insert+shift+control+s": "toggleSounds",
-		"kb:shift+control+insert+s": "toggleSounds",
-
-		# Odczyt wszystkich statusów na żądanie (NVDA+Ctrl+Shift+Z oraz Insert+Ctrl+Shift+Z)
-		"kb:NVDA+control+shift+z": "reportAllMessageStatuses",
-		"kb:control+shift+NVDA+z": "reportAllMessageStatuses",
-		"kb:insert+control+shift+z": "reportAllMessageStatuses",
-		"kb:control+shift+insert+z": "reportAllMessageStatuses",
-		"kb:NVDA+shift+control+z": "reportAllMessageStatuses",
-		"kb:shift+control+NVDA+z": "reportAllMessageStatuses",
-		"kb:insert+shift+control+z": "reportAllMessageStatuses",
-		"kb:shift+control+insert+z": "reportAllMessageStatuses",
-
-		# Dodatkowy, prosty i wygodny skrót NVDA+Shift+Z / Insert+Shift+Z bez konieczności wciskania 4 klawiszy naraz
-		"kb:NVDA+shift+z": "reportAllMessageStatuses",
-		"kb:shift+NVDA+z": "reportAllMessageStatuses",
-		"kb:insert+shift+z": "reportAllMessageStatuses",
-		"kb:shift+insert+z": "reportAllMessageStatuses",
-
-		# Pomoc kontekstowa i spis skrótów klawiszowych (NVDA+Ctrl+Shift+H oraz Insert+Ctrl+Shift+H)
-		"kb:NVDA+control+shift+h": "showContextHelp",
-		"kb:control+shift+NVDA+h": "showContextHelp",
-		"kb:insert+control+shift+h": "showContextHelp",
-		"kb:control+shift+insert+h": "showContextHelp",
-		"kb:NVDA+shift+control+h": "showContextHelp",
-		"kb:shift+control+NVDA+h": "showContextHelp",
-		"kb:insert+shift+control+h": "showContextHelp",
-		"kb:shift+control+insert+h": "showContextHelp",
-
-		# Przełącznik nawigatora wątków (NVDA+Ctrl+Shift+T oraz Insert+Ctrl+Shift+T)
-		"kb:NVDA+control+shift+t": "toggleThreadNavigation",
-		"kb:control+shift+NVDA+t": "toggleThreadNavigation",
-		"kb:insert+control+shift+t": "toggleThreadNavigation",
-		"kb:control+shift+insert+t": "toggleThreadNavigation",
-		"kb:NVDA+shift+control+t": "toggleThreadNavigation",
-		"kb:shift+control+NVDA+t": "toggleThreadNavigation",
-		"kb:insert+shift+control+t": "toggleThreadNavigation",
-		"kb:shift+control+insert+t": "toggleThreadNavigation",
-
-		# Nawigator wątków wiadomości (NVDA+F7, NVDA+Alt+F7, Insert+F7, Insert+Alt+F7)
-		"kb:NVDA+f7": "showEmailThreadStructure",
-		"kb:insert+f7": "showEmailThreadStructure",
-		"kb:NVDA+alt+f7": "showEmailThreadStructure",
-		"kb:alt+NVDA+f7": "showEmailThreadStructure",
-		"kb:insert+alt+f7": "showEmailThreadStructure",
-		"kb:alt+insert+f7": "showEmailThreadStructure",
-
-		# Szybkie skoki po wiadomościach w wątku (NVDA+Alt+Dół/Góra/Home/End)
-		"kb:NVDA+alt+downArrow": "nextThreadMessage",
-		"kb:alt+NVDA+downArrow": "nextThreadMessage",
-		"kb:insert+alt+downArrow": "nextThreadMessage",
-		"kb:alt+insert+downArrow": "nextThreadMessage",
-
-		"kb:NVDA+alt+upArrow": "prevThreadMessage",
-		"kb:alt+NVDA+upArrow": "prevThreadMessage",
-		"kb:insert+alt+upArrow": "prevThreadMessage",
-		"kb:alt+insert+upArrow": "prevThreadMessage",
-
-		"kb:NVDA+alt+home": "firstThreadMessage",
-		"kb:alt+NVDA+home": "firstThreadMessage",
-		"kb:insert+alt+home": "firstThreadMessage",
-		"kb:alt+insert+home": "firstThreadMessage",
-
-		"kb:NVDA+alt+end": "lastThreadMessage",
-		"kb:alt+NVDA+end": "lastThreadMessage",
-		"kb:insert+alt+end": "lastThreadMessage",
-		"kb:alt+insert+end": "lastThreadMessage",
-	}
+	# Skróty klawiszowe są zdefiniowane wyłącznie w dekoratorach @script(gestures=[...]).
+	# „kb:NVDA+...” obejmuje zarówno Insert, jak i Caps Lock (zależnie od ustawień klawisza NVDA),
+	# a NVDA normalizuje kolejność modyfikatorów, więc permutacje nie są potrzebne.
 
 	def getScript(self, gesture):
 		script = super().getScript(gesture)
@@ -4772,8 +5189,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				return None
 			# Jeśli to nawigacja po wątku:
 			if script_name == "script_showEmailThreadStructure":
-				conf = config.conf.get(CONFIG_SECTION, {})
-				if not _to_bool(conf.get("threadNavigationEnabled", True), default=True):
+				if not _get_conf_snapshot()["threadNavigationEnabled"]:
 					return None
 				g_name = gesture.displayName.lower() if hasattr(gesture, "displayName") else ""
 				if "alt" not in g_name and not self._is_outlook_message_active():
@@ -4783,80 +5199,45 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 
-		# Zabezpieczenie popupSettingsDialog przed zablokowaniem skrótu NVDA+Ctrl+G
-		global _original_popupSettingsDialog
-		if _original_popupSettingsDialog is None and hasattr(gui, "popupSettingsDialog"):
-			_original_popupSettingsDialog = gui.popupSettingsDialog
-			gui.popupSettingsDialog = _safe_popupSettingsDialog
-
-		# Natychmiastowe odblokowanie ewentualnej zawieszonej instancji NVDASettingsDialog
-		try:
-			curInst = getattr(gui.settingsDialogs.NVDASettingsDialog, "_instance", None)
-			if curInst is not None:
-				try:
-					if not (isinstance(curInst, wx.Window) and curInst and curInst.IsShown()):
-						gui.settingsDialogs.NVDASettingsDialog._instance = None
-				except Exception:
-					gui.settingsDialogs.NVDASettingsDialog._instance = None
-		except Exception:
-			pass
-
 		config.conf.spec[CONFIG_SECTION] = confspec
 		if CONFIG_SECTION not in config.conf:
 			config.conf[CONFIG_SECTION] = {}
 		targetSec = config.conf[CONFIG_SECTION]
 
-		# Bezpieczna migracja ustawień ze starej konfiguracji (jeśli istnieje) z jawną konwersją typów
+		# Jednorazowa migracja ustawień ze starej sekcji (kopiowane są tylko brakujące klucze).
+		# Nie przepisujemy pozostałych kluczy ani nie zapisujemy konfiguracji przy starcie —
+		# typy wartości zapewnia specyfikacja confspec, a odczyty używają _to_bool/_to_int.
 		if OLD_CONFIG_SECTION in config.conf:
 			try:
 				oldSec = config.conf[OLD_CONFIG_SECTION]
+				migrated = False
 				for k, v in oldSec.items():
 					if k in confspec and k not in targetSec:
 						targetSec[k] = v
-				log.info("outlookSpeechFilter: Przeprowadzono bezpieczną migrację konfiguracji ze starej sekcji outlookMessageCleaner")
+						migrated = True
+				if migrated:
+					log.info("outlookSpeechFilter: Przeprowadzono migrację konfiguracji ze starej sekcji outlookMessageCleaner")
 			except Exception as e:
 				log.warning(f"outlookSpeechFilter: Błąd migracji ze starej konfiguracji: {e}")
 
-		# Ścisła sanitizacja i konwersja typów wszystkich kluczy w sekcji konfiguracji
-		# Zapobiega błędom TypeError: CheckBox.SetValue(): argument 1 has unexpected type 'str'
-		for k, specStr in confspec.items():
-			if k in targetSec:
-				rawVal = targetSec[k]
-				if specStr.startswith("boolean"):
-					defVal = "default=True" in specStr
-					targetSec[k] = _to_bool(rawVal, default=defVal)
-				elif specStr.startswith("integer"):
-					targetSec[k] = _to_int(rawVal, default=80, min_val=0, max_val=100)
-				elif specStr.startswith("string"):
-					targetSec[k] = str(rawVal)
-
-		# Sanitizacja adresu URL aktualizacji - usunięcie lokalnych ścieżek z fazy testowej
-		curUpd = str(targetSec.get("updateSourceUrl", "")).strip()
-		if not curUpd or "mój dysk" in curUpd.lower() or "moj dysk" in curUpd.lower() or curUpd.endswith("updates.json"):
-			targetSec["updateSourceUrl"] = DEFAULT_UPDATE_SOURCE_URL
-
-		# Walidacja i zapis poprawionej konfiguracji
-		try:
-			config.conf.validate(config.conf.validator, copy=True)
-		except Exception:
-			pass
-		try:
-			config.conf.save()
-		except Exception:
-			pass
+		_invalidate_conf_snapshot()
+		self._registeredConfigHandlers = []
+		for extPointName in ("post_configProfileSwitch", "post_configReset"):
+			extPoint = getattr(config, extPointName, None)
+			if extPoint is None:
+				continue
+			try:
+				extPoint.register(_invalidate_conf_snapshot)
+				self._registeredConfigHandlers.append(extPoint)
+			except Exception as e:
+				log.debugWarning(f"outlookSpeechFilter: nie można zarejestrować {extPointName}: {e}")
 
 		patchOutlookClasses()
+		_refresh_script_descriptions()
 
 		# Bezpieczna rejestracja panelu ustawień bez dublowania
 		if OutlookSpeechFilterSettingsPanel not in gui.settingsDialogs.NVDASettingsDialog.categoryClasses:
 			gui.settingsDialogs.NVDASettingsDialog.categoryClasses.append(OutlookSpeechFilterSettingsPanel)
-
-		# Jawne powiązanie gestów klawiszowych dla natychmiastowego działania z klawiszem Insert i CapsLock
-		for gestureStr, scriptName in self.__gestures.items():
-			try:
-				self.bindGesture(gestureStr, scriptName)
-			except Exception:
-				pass
 
 		# Inicjalizacja modułu aktualizacji i opóźnione sprawdzenie w tle
 		self._updater = AddonUpdaterEngine(
@@ -4866,40 +5247,55 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			addon_dir=ADDON_DIR,
 			config_section=CONFIG_SECTION
 		)
-		wx.CallLater(15000, self._check_updates_auto)
+		self._updateTimer = wx.CallLater(15000, self._check_updates_auto)
 
 	def _check_updates_auto(self):
+		self._updateTimer = None
 		conf = config.conf.get(CONFIG_SECTION, {})
-		if not conf.get("autoCheckUpdates", True):
+		if not _to_bool(conf.get("autoCheckUpdates", True), default=True):
 			return
-		last_time = conf.get("lastUpdateCheckTime", 0.0)
+		try:
+			last_time = float(conf.get("lastUpdateCheckTime", 0.0) or 0.0)
+		except (TypeError, ValueError):
+			last_time = 0.0
 		if time.time() - last_time < 86400:
 			return
 		self._updater.check_for_updates(manual=False)
 
 	def chooseNVDAObjectOverlayClasses(self, obj, clsList):
+		# Nakładka tylko dla obiektów UIA Outlooka o klasach rzeczywistych wierszy wiadomości
+		# lub nagłówków grup — nigdy dla obiektów IAccessible ani na podstawie samej roli/nazwy.
+		if not builtinOutlook or _UIAObjectClass is None:
+			return
+		if not isinstance(obj, _UIAObjectClass):
+			return
 		appMod = getattr(obj, "appModule", None)
-		if appMod and getattr(appMod, "appName", "").lower() == "outlook":
+		if not appMod or getattr(appMod, "appName", "").lower() != "outlook":
+			return
+		cachedCls = _uia_class_name(obj)
+		if cachedCls in MESSAGE_ROW_CLASSES or cachedCls in GROUP_HEADER_CLASSES:
 			patchOutlookClasses()
-			cachedCls = getattr(getattr(obj, "UIAElement", None), "cachedClassName", "") or ""
-			rawName = getattr(getattr(obj, "UIAElement", None), "cachedName", "") or getattr(getattr(obj, "UIAElement", None), "currentName", "") or ""
-			role = getattr(obj, "role", None)
-
-			isRow = cachedCls in ("LeafRow", "ThreadItem", "ThreadHeader", "GroupHeader", "OutlookGridGroupHeader", "TableItem")
-			isGroup = (
-				role in (controlTypes.Role.GROUPING, controlTypes.Role.HEADER)
-				or (rawName and any(k in rawName.lower() for k in ("grupuj według", "group by", "kategorie:", "kategoria:")))
-			)
-			if isRow or isGroup:
-				if CleanOutlookGridRow not in clsList:
-					clsList.insert(0, CleanOutlookGridRow)
+			if CleanOutlookGridRow not in clsList:
+				clsList.insert(0, CleanOutlookGridRow)
 
 	def terminate(self, *args, **kwargs):
 		super().terminate(*args, **kwargs)
 		_stop_pending_sounds()
-		global _original_UIAGridRow_get_name, _original_getReceivedMessageString, _patches_applied, _original_popupSettingsDialog
+		global _original_UIAGridRow_get_name, _original_getReceivedMessageString, _patches_applied
 
-		# Przywrócenie dokładnych oryginalnych metod dla każdej klasy
+		try:
+			if getattr(self, "_updateTimer", None) is not None:
+				self._updateTimer.Stop()
+		except Exception:
+			pass
+
+		for extPoint in getattr(self, "_registeredConfigHandlers", []):
+			try:
+				extPoint.unregister(_invalidate_conf_snapshot)
+			except Exception:
+				pass
+
+		# Przywrócenie oryginalnych funkcji tylko wtedy, gdy nadal są to nasze podmiany
 		for (target_obj, attr_name), orig in list(_saved_class_methods.items()):
 			try:
 				curr = getattr(target_obj, attr_name, None)
@@ -4913,14 +5309,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		_original_getReceivedMessageString = None
 		_patches_applied = False
 
-		# Przywrócenie oryginalnego popupSettingsDialog
-		if _original_popupSettingsDialog is not None:
-			try:
-				gui.popupSettingsDialog = _original_popupSettingsDialog
-			except Exception:
-				pass
-			_original_popupSettingsDialog = None
-
 		# Czyste usunięcie wszystkich instancji panelu z categoryClasses
 		while OutlookSpeechFilterSettingsPanel in gui.settingsDialogs.NVDASettingsDialog.categoryClasses:
 			try:
@@ -4929,22 +5317,16 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				break
 
 	@script(
-		description=_("Przełącza filtrowanie mowy o wiadomościach w skrzynce programu Outlook"),
+		description=_t("GESTURE_DESC_TOGGLE_FILTER"),
 		gestures=[
 			"kb:NVDA+control+shift+o",
-			"kb:control+shift+NVDA+o",
-			"kb:insert+control+shift+o",
-			"kb:control+shift+insert+o",
 		],
 	)
 	def script_toggleOutlookCleaner(self, gesture):
 		conf = config.conf[CONFIG_SECTION]
 		newState = not _to_bool(conf.get("enabled", True), default=True)
 		conf["enabled"] = newState
-		try:
-			config.conf.save()
-		except Exception:
-			pass
+		_invalidate_conf_snapshot()
 		panel = get_active_settings_panel()
 		if panel:
 			def _update_ui():
@@ -4961,22 +5343,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	script_toggleOutlookSpeechFilter = script_toggleOutlookCleaner
 
 	@script(
-		description=_("Przełącza odtwarzanie dźwięków statusów w skrzynce programu Outlook"),
+		description=_t("GESTURE_DESC_TOGGLE_SOUNDS"),
 		gestures=[
 			"kb:NVDA+control+shift+s",
-			"kb:control+shift+NVDA+s",
-			"kb:insert+control+shift+s",
-			"kb:control+shift+insert+s",
 		],
 	)
 	def script_toggleSounds(self, gesture):
 		conf = config.conf[CONFIG_SECTION]
 		newState = not _to_bool(conf.get("useSounds", True), default=True)
 		conf["useSounds"] = newState
-		try:
-			config.conf.save()
-		except Exception:
-			pass
+		_invalidate_conf_snapshot()
+		if not newState:
+			_stop_pending_sounds()
 		panel = get_active_settings_panel()
 		if panel:
 			def _update_ui():
@@ -4990,16 +5368,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			ui.message(_t("TOGGLE_SOUNDS_OFF"))
 
 	@script(
-		description=_("Odczytuje na żądanie wszystkie statusy aktualnej wiadomości w Outlooku"),
+		description=_t("GESTURE_DESC_REPORT_STATUSES"),
 		gestures=[
 			"kb:NVDA+control+shift+z",
-			"kb:control+shift+NVDA+z",
-			"kb:insert+control+shift+z",
-			"kb:control+shift+insert+z",
 			"kb:NVDA+shift+z",
-			"kb:shift+NVDA+z",
-			"kb:insert+shift+z",
-			"kb:shift+insert+z",
 		],
 	)
 	def script_reportAllMessageStatuses(self, gesture):
@@ -5163,12 +5535,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			ui.message(msg)
 			return
 
-		# 1. Sprawdź zarejestrowane statusy na wierszu podczas ostatniego przetwarzania
-		rowStatuses = getattr(focus, "_osf_statuses", None) or getattr(focus, "_omc_statuses", None)
-		if not rowStatuses and getattr(focus, "parent", None):
-			rowStatuses = getattr(focus.parent, "_osf_statuses", None) or getattr(focus.parent, "_omc_statuses", None)
-		if not rowStatuses and _last_focused_statuses:
-			rowStatuses = _last_focused_statuses
+		# 1. Statusy wiersza z ostatniego przetwarzania (lista krotek (klucz_statusu, tekst))
+		rowItems = None
+		for cand in (focus, getattr(focus, "parent", None)):
+			if isinstance(cand, CleanOutlookGridRow):
+				try:
+					rowItems = _get_row_info(cand)[1]
+				except Exception:
+					rowItems = None
+				break
+		if not rowItems and _last_focused_statuses:
+			rowItems = _last_focused_statuses
 
 		# 2. Pobierz obiekt wiadomości (selection)
 		selection = None
@@ -5186,65 +5563,35 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				except (COMError, Exception):
 					selection = None
 
-		statuses = _get_message_statuses_report(
+		statusItems = _get_message_statuses_report(
 			appMod,
 			selection,
 			windowThreadID=getattr(focus, "windowThreadID", None),
 			uiaObj=focus,
 		)
 
-		# 3. Jeśli rowStatuses zawiera informacje uzupełniające, połącz je (odfiltrowując fałszywe kategorie)
-		if rowStatuses:
-			for s in rowStatuses:
-				sLower = s.strip().lower()
-				if sLower in ("bez kategorii", "brak kategorii", "no category", "no categories", "none"):
-					continue
-				if s not in statuses:
-					statuses.append(s)
+		# 3. Uzupełnij statusami wiersza (łączenie po kluczu statusu, bez duplikatów)
+		merged = {}
+		for key, text in statusItems:
+			merged.setdefault(key, text)
+		if rowItems:
+			for key, text in rowItems:
+				merged.setdefault(key, text)
 
-		# 4. Posortuj ściśle według CANONICAL_STATUS_ORDER
-		def _status_order_key(item):
-			itemLower = item.lower()
-			if "nieprzeczytana" in itemLower or "unread" in itemLower:
-				return 0
-			if "oflagow" in itemLower or "flaga" in itemLower or "flag" in itemLower:
-				return 1
-			if "załącznik" in itemLower or "attachment" in itemLower:
-				return 2
-			if "odpowiedz" in itemLower or "replied" in itemLower:
-				return 3
-			if "przesłan" in itemLower or "forward" in itemLower:
-				return 4
-			if "wysoki priorytet" in itemLower or "high" in itemLower:
-				return 5
-			if "niski priorytet" in itemLower or "low" in itemLower:
-				return 6
-			if any(k in itemLower for k in ("priorytet", "ważność", "importance")):
-				return 6
-			if any(k in itemLower for k in ("spotkani", "meeting")):
-				return 7
-			if any(k in itemLower for k in ("kategori", "category")):
-				return 8
-			if any(k in itemLower for k in ("zewnętrzn", "external")):
-				return 9
-			return 10
-
-		statuses.sort(key=_status_order_key)
+		# 4. Kolejność ściśle według CANONICAL_STATUS_ORDER (dokładne dopasowanie klucza)
+		statuses = [merged[k] for k in sorted(merged, key=_status_order_key)]
 
 		if statuses:
 			ui.message(", ".join(statuses))
-		elif selection or rowStatuses is not None:
+		elif selection or rowItems is not None:
 			ui.message(_t("STATUS_NO_ADDITIONAL"))
 		else:
 			ui.message(_t("STATUS_NO_SELECTION"))
 
 	@script(
-		description=_("Wyświetla pomoc kontekstową i spis skrótów klawiszowych dodatku Outlook Speech Filter"),
+		description=_t("GESTURE_DESC_CONTEXT_HELP"),
 		gestures=[
 			"kb:NVDA+control+shift+h",
-			"kb:control+shift+NVDA+h",
-			"kb:insert+control+shift+h",
-			"kb:control+shift+insert+h",
 		],
 	)
 	def script_showContextHelp(self, gesture):
@@ -5387,9 +5734,15 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		if not doc:
 			doc = getActiveWordDocument()
 
-		if doc:
-			exact_pos = resolveMessageRangeInWord(doc, target_msg)
-			selectWordRange(doc, exact_pos)
+		if not doc:
+			ui.message(_t("THREAD_CANNOT_NAVIGATE"))
+			return False
+
+		exact_pos = resolveMessageRangeInWord(doc, target_msg)
+		if not selectWordRange(doc, exact_pos):
+			# Sukces ogłaszamy tylko wtedy, gdy kursor faktycznie został przeniesiony
+			ui.message(_t("THREAD_NAV_ERROR"))
+			return False
 
 		# Dźwięk potwierdzenia przejścia
 		_play_status_sound("replied")
@@ -5402,24 +5755,19 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		date_info = f", {date}" if date else ""
 		msg_text = _t("THREAD_MSG_ANNOUNCE", index=idx, total=total, sender=sender, date=date_info)
 		ui.message(msg_text)
+		return True
 
 	@script(
-		description=_("Przełącza nawigator wątków wiadomości w programie Outlook"),
+		description=_t("GESTURE_DESC_TOGGLE_THREAD_NAV"),
 		gestures=[
 			"kb:NVDA+control+shift+t",
-			"kb:control+shift+NVDA+t",
-			"kb:insert+control+shift+t",
-			"kb:control+shift+insert+t",
 		],
 	)
 	def script_toggleThreadNavigation(self, gesture):
 		conf = config.conf[CONFIG_SECTION]
 		newState = not _to_bool(conf.get("threadNavigationEnabled", True), default=True)
 		conf["threadNavigationEnabled"] = newState
-		try:
-			config.conf.save()
-		except Exception:
-			pass
+		_invalidate_conf_snapshot()
 		panel = get_active_settings_panel()
 		if panel:
 			def _update_ui():
@@ -5433,13 +5781,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			ui.message(_t("TOGGLE_THREAD_NAV_OFF"))
 
 	@script(
-		description=_("Wyświetla listę wiadomości w wątku bieżącej korespondencji w Outlooku (okno struktury wątku)"),
+		description=_t("GESTURE_DESC_THREAD_STRUCTURE"),
 		gestures=[
 			"kb:NVDA+f7",
-			"kb:insert+f7",
 			"kb:NVDA+alt+f7",
-			"kb:insert+alt+f7",
-		]
+		],
 	)
 	def script_showEmailThreadStructure(self, gesture):
 		conf = config.conf.get(CONFIG_SECTION, {})
@@ -5488,11 +5834,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		wx.CallAfter(_show_dialog)
 
 	@script(
-		description=_("Przechodzi do następnej (starszej) wiadomości w wątku korespondencji w Outlooku"),
+		description=_t("GESTURE_DESC_THREAD_NEXT"),
 		gestures=[
 			"kb:NVDA+alt+downArrow",
-			"kb:insert+alt+downArrow",
-		]
+		],
 	)
 	def script_nextThreadMessage(self, gesture):
 		conf = config.conf.get(CONFIG_SECTION, {})
@@ -5522,11 +5867,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._jump_to_thread_message(msgs[target_idx], msgs, doc, mailItem)
 
 	@script(
-		description=_("Przechodzi do poprzedniej (nowszej) wiadomości w wątku korespondencji w Outlooku"),
+		description=_t("GESTURE_DESC_THREAD_PREV"),
 		gestures=[
 			"kb:NVDA+alt+upArrow",
-			"kb:insert+alt+upArrow",
-		]
+		],
 	)
 	def script_prevThreadMessage(self, gesture):
 		conf = config.conf.get(CONFIG_SECTION, {})
@@ -5556,11 +5900,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._jump_to_thread_message(msgs[target_idx], msgs, doc, mailItem)
 
 	@script(
-		description=_("Przechodzi do najnowszej (pierwszej) wiadomości w wątku korespondencji w Outlooku"),
+		description=_t("GESTURE_DESC_THREAD_FIRST"),
 		gestures=[
 			"kb:NVDA+alt+home",
-			"kb:insert+alt+home",
-		]
+		],
 	)
 	def script_firstThreadMessage(self, gesture):
 		conf = config.conf.get(CONFIG_SECTION, {})
@@ -5578,11 +5921,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._jump_to_thread_message(msgs[0], msgs, doc, mailItem)
 
 	@script(
-		description=_("Przechodzi do najstarszej (ostatniej) wiadomości w wątku korespondencji w Outlooku"),
+		description=_t("GESTURE_DESC_THREAD_LAST"),
 		gestures=[
 			"kb:NVDA+alt+end",
-			"kb:insert+alt+end",
-		]
+		],
 	)
 	def script_lastThreadMessage(self, gesture):
 		conf = config.conf.get(CONFIG_SECTION, {})
@@ -5598,4 +5940,31 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			ui.message(_t("THREAD_ONLY_ONE_MESSAGE"))
 			return
 		self._jump_to_thread_message(msgs[-1], msgs, doc, mailItem)
+
+
+# Opisy skryptów w oknie „Zdarzenia wejścia” — klucze tłumaczeń _t, odświeżane po zmianie języka dodatku
+SCRIPT_DESCRIPTION_KEYS = {
+	"script_toggleOutlookCleaner": "GESTURE_DESC_TOGGLE_FILTER",
+	"script_toggleSounds": "GESTURE_DESC_TOGGLE_SOUNDS",
+	"script_reportAllMessageStatuses": "GESTURE_DESC_REPORT_STATUSES",
+	"script_showContextHelp": "GESTURE_DESC_CONTEXT_HELP",
+	"script_toggleThreadNavigation": "GESTURE_DESC_TOGGLE_THREAD_NAV",
+	"script_showEmailThreadStructure": "GESTURE_DESC_THREAD_STRUCTURE",
+	"script_nextThreadMessage": "GESTURE_DESC_THREAD_NEXT",
+	"script_prevThreadMessage": "GESTURE_DESC_THREAD_PREV",
+	"script_firstThreadMessage": "GESTURE_DESC_THREAD_FIRST",
+	"script_lastThreadMessage": "GESTURE_DESC_THREAD_LAST",
+}
+
+
+def _refresh_script_descriptions():
+	"""Ustawia opisy skryptów (__doc__) zgodnie z aktualnym językiem dodatku."""
+	for scriptName, key in SCRIPT_DESCRIPTION_KEYS.items():
+		func = GlobalPlugin.__dict__.get(scriptName)
+		if func is None:
+			continue
+		try:
+			func.__doc__ = _t(key)
+		except Exception:
+			pass
 
